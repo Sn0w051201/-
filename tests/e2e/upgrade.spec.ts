@@ -198,3 +198,22 @@ test("编辑清单与旅行元数据，删除整场旅行需确认", async ({ pa
   expect(stored.trips).toHaveLength(1);
   expect(stored.trips[0].destination).toBe("杭州");
 });
+test("网络失败显示健康检查入口，不要求重新配置密钥", async ({ page }) => {
+  await page.goto("/#settings");
+  await page
+    .getByLabel("后端代理地址", { exact: false })
+    .fill("https://proxy.example/api/ai");
+  await page.getByRole("button", { name: "保存 AI 配置" }).click();
+  await page.route("https://proxy.example/api/ai", (r) => r.abort("failed"));
+  await nav(page, "AI 灵感规划");
+  await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "不能判断 API Key 是否有效",
+  );
+  await expect(
+    page.getByRole("link", { name: "打开后端健康检查 ↗" }),
+  ).toHaveAttribute("href", "https://proxy.example/api/health");
+  await expect(
+    page.getByRole("button", { name: "查看 AI 配置", exact: true }),
+  ).toHaveCount(0);
+});

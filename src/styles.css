@@ -5623,3 +5623,4 @@ h1 {
     width: min(290px, 90vw);
   }
 }
+.inline-error a{display:inline-block;color:inherit;text-decoration:underline;margin:8px 0 0 10px}.inline-error button{margin-top:8px}

@@ -98,3 +98,11 @@ npm run deploy:pages
 若自动部署已开启，推送 main 后会重建；否则在 Render 点击 Manual Deploy → Deploy latest commit。`render.yaml` 对新建 Blueprint 生效，不会自动改变已有服务的控制台环境变量。
 
 部署成功后，使用 Render 实际分配的网址访问 `/api/health`，应返回 `{"ok":true}`。前端代理地址填同一网址加 `/api/ai`。域名必须以控制台实际显示为准，不能从服务名称猜测。浏览器使用自己购买的模型 Key 时，服务器无需设置 `LLM_API_KEY` 或 `PROXY_ACCESS_TOKEN`。首次请求可能等待免费实例唤醒。
+
+### 浏览器显示 Failed to fetch
+
+这是浏览器无法读取 HTTP 响应，不足以判断模型 Key 无效。常见原因是 CORS 预检被拒绝、服务未启动、Render 正在唤醒或网络不可达。
+
+HTTP 代理现在从公开模板 `config/web-deployment.json` 读取本项目默认前端来源；已有 Render 服务未填写 `ALLOWED_ORIGIN` 也允许 `https://sn0w051201.github.io`。显式环境变量仍优先；变量值必须是来源，不能包含 `/-/` 路径。可信的 `RENDER_EXTERNAL_URL` 和服务同源也可访问；无关来源仍返回403，不使用通配符，服务器 Key 仍需令牌。
+
+`/api/health` 返回 `{"ok":true,"service":"moodnomad-proxy","version":2}`，可用于确认新版本已部署。网页区分网络、超时、模型授权、代理响应格式和攻略结构错误；网络失败提供健康检查入口，不要求重新配置 Key。客户端等待上限120秒，允许免费实例冷启动，但不自动重发可能收费的生成请求。

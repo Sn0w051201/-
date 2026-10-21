@@ -1,3 +1,6 @@
+import { AIRequestError } from "../services/ai-errors";
+import type { AIErrorKind } from "../services/ai-errors";
+import { getAISettings, proxyURL } from "../services/ai-settings";
 import { applyPlan, newPlannedTrip } from "../domain/journey";
 import { mockPlan } from "../services/planner";
 import Recommendation, {
@@ -46,6 +49,16 @@ export default function Planner() {
   const [result, setResult] = useState<GeneratedPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [failureKind, setFailureKind] = useState<AIErrorKind | null>(null);
+  const healthURL = () => {
+    try {
+      const url = new URL(proxyURL(getAISettings().proxyUrl));
+      url.pathname = url.pathname.replace(/\/api\/ai\/?$/, "/api/health");
+      return url.href;
+    } catch {
+      return undefined;
+    }
+  };
   const [target, setTarget] = useState("all");
   const [input, setInput] = useState<PlanInput | null>(null);
   const [applied, setApplied] = useState(false);
@@ -56,6 +69,7 @@ export default function Planner() {
   const run = async (data: PlanInput, useOffline = false) => {
     setBusy(true);
     setError("");
+    setFailureKind(null);
     setApplied(false);
     try {
       setOffline(useOffline);
@@ -77,6 +91,7 @@ export default function Planner() {
       setResult(plan);
       setInput(data);
     } catch (e) {
+      setFailureKind(e instanceof AIRequestError ? e.kind : null);
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -127,6 +142,7 @@ export default function Planner() {
                   ) === "offline",
                 );
               } catch (err) {
+                setFailureKind(null);
                 setError((err as Error).message);
               }
             }}
@@ -322,16 +338,26 @@ export default function Planner() {
             </Field>
             {error && (
               <div className="inline-error" role="alert">
-                {error}
+                <p>{error}</p>
                 <button
                   type="button"
                   onClick={() => draft && void run(draft, offline)}
                 >
                   重新尝试
                 </button>
-                <button type="button" onClick={() => setView("settings")}>
-                  配置 AI 服务
-                </button>
+                {failureKind === "configuration" && (
+                  <button type="button" onClick={() => setView("settings")}>
+                    查看 AI 配置
+                  </button>
+                )}
+                {(failureKind === "network" ||
+                  failureKind === "timeout" ||
+                  failureKind === "service") &&
+                  healthURL() && (
+                    <a href={healthURL()} target="_blank" rel="noreferrer">
+                      打开后端健康检查 ↗
+                    </a>
+                  )}
               </div>
             )}
             <Button type="submit" className="full-width" disabled={busy}>

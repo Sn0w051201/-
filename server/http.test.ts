@@ -109,3 +109,61 @@ it("上游失败返回可读错误，不泄露模型响应、密钥或无效行�
   expect(res.status).toBe(400);
   expect(await res.text()).not.toMatch(/private|test-private-key|"days"/);
 });
+it("已有服务未设置跨域变量时，允许项目网页预检及健康检查，拒绝无关来源", async () => {
+  vi.stubEnv("ALLOWED_ORIGIN", "");
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("LLM_API_KEY", "server-secret");
+  const base = await server();
+  const origin = "https://sn0w051201.github.io";
+  const preflight = await nativeFetch(base + "/api/ai", {
+    method: "OPTIONS",
+    headers: {
+      Origin: origin,
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type,authorization",
+    },
+  });
+  expect(preflight.status).toBe(204);
+  expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+  expect(preflight.headers.get("access-control-allow-headers")).toContain(
+    "Authorization",
+  );
+  const health = await nativeFetch(base + "/api/health", {
+    headers: { Origin: origin },
+  });
+  expect(health.status).toBe(200);
+  expect((await health.json()).version).toBe(2);
+  const denied = await nativeFetch(base + "/api/ai", {
+    method: "OPTIONS",
+    headers: { Origin: "https://attacker.example" },
+  });
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("access-control-allow-origin")).toBeNull();
+  const auth = await nativeFetch(base + "/api/ai", {
+    method: "POST",
+    headers: { Origin: origin },
+    body: JSON.stringify({ provider: "openai", input }),
+  });
+  expect(auth.status).toBe(401);
+  expect(auth.headers.get("access-control-allow-origin")).toBe(origin);
+});
+it("显式来源覆盖默认来源，并支持 Render 可信环境提供的同源网址", async () => {
+  vi.stubEnv("ALLOWED_ORIGIN", "https://private.example");
+  vi.stubEnv("RENDER_EXTERNAL_URL", "https://sn0w.onrender.com");
+  const base = await server();
+  for (const origin of [
+    "https://private.example",
+    "https://sn0w.onrender.com",
+    base,
+  ]) {
+    const r = await nativeFetch(base + "/api/health", {
+      headers: { Origin: origin },
+    });
+    expect(r.status).toBe(200);
+    expect(r.headers.get("access-control-allow-origin")).toBe(origin);
+  }
+  const blocked = await nativeFetch(base + "/api/health", {
+    headers: { Origin: "https://sn0w051201.github.io" },
+  });
+  expect(blocked.status).toBe(403);
+});

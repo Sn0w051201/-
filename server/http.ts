@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { generateWithProvider } from "./llm";
+import deployment from "../config/web-deployment.json";
 const providers = {
   openai: ["https://api.openai.com/v1", "gpt-4o-mini"],
   deepseek: ["https://api.deepseek.com", "deepseek-chat"],
@@ -11,22 +12,29 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   const origin = req.headers.origin;
-  const allowed = process.env.ALLOWED_ORIGIN;
-  if (
-    origin &&
-    origin !==
-      (allowed ||
-        `${"encrypted" in req.socket && req.socket.encrypted ? "https" : "http"}://${req.headers.host}`)
-  ) {
+  // CORS origins are public deployment settings, never model credentials.
+  // Existing Render services do not automatically inherit new Blueprint variables.
+  const configuredOrigin =
+    process.env.ALLOWED_ORIGIN?.trim() || deployment.defaultFrontendOrigin;
+  const ownOrigin = `${"encrypted" in req.socket && req.socket.encrypted ? "https" : "http"}://${req.headers.host}`;
+  const allowedOrigins = new Set([configuredOrigin, ownOrigin]);
+  // Render supplies this trusted environment variable when TLS terminates upstream.
+  if (process.env.RENDER_EXTERNAL_URL) {
+    try {
+      const external = new URL(process.env.RENDER_EXTERNAL_URL);
+      if (external.protocol === "https:") allowedOrigins.add(external.origin);
+    } catch {}
+  }
+  res.setHeader("Vary", "Origin");
+  if (origin && !allowedOrigins.has(origin)) {
     res.writeHead(403);
     res.end(JSON.stringify({ error: "来源不在允许范围" }));
     return true;
   }
-  if (origin && allowed) {
-    res.setHeader("Access-Control-Allow-Origin", allowed);
-    res.setHeader("Vary", "Origin");
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
-    res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   }
   if (req.method === "OPTIONS") {
     res.writeHead(204);
@@ -34,7 +42,9 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
     return true;
   }
   if (req.url === "/api/health") {
-    res.end(JSON.stringify({ ok: true }));
+    res.end(
+      JSON.stringify({ ok: true, service: "moodnomad-proxy", version: 2 }),
+    );
     return true;
   }
   if (req.url !== "/api/ai" || req.method !== "POST") {
