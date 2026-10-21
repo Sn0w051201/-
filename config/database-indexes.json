@@ -1,0 +1,10 @@
+{
+  "trips": [
+    { "name": "memberIds", "fields": [{ "field": "memberIds", "order": 1 }] },
+    { "name": "ownerId", "fields": [{ "field": "ownerId", "order": 1 }] }
+  ],
+  "shares": [{ "name": "tripId", "fields": [{ "field": "tripId", "order": 1 }] }],
+  "invitations": [{ "name": "tripId", "fields": [{ "field": "tripId", "order": 1 }] }],
+  "receipts": [{ "name": "tripId", "fields": [{ "field": "tripId", "order": 1 }] }],
+  "ai_jobs": [{ "name": "user_created", "fields": [{ "field": "userId", "order": 1 }, { "field": "createdAt", "order": -1 }] }]
+}

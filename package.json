@@ -1,0 +1,43 @@
+{
+  "name": "moodnomad-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "build:cloud": "node scripts/build-cloud.mjs",
+    "check": "npm run typecheck && npm test && npm run build && npm run build:cloud",
+    "deploy:pages": "node scripts/deploy-pages.mjs"
+  },
+  "dependencies": {
+    "@cloudbase/js-sdk": "^2.23.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.468.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@cloudbase/node-sdk": "^3.10.0",
+    "@playwright/test": "^1.51.0",
+    "@types/leaflet": "^1.9.16",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.25.0",
+    "typescript": "~5.7.2",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

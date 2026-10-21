@@ -1,0 +1,8 @@
+import { expect,it,vi } from 'vitest';
+import { generateWithProvider } from './llm';
+import { mockPlan } from '../src/services/planner';
+const input={destination:'大理',days:2,travelers:4,budgetMinor:800000,pace:'relaxed' as const,interests:[]};
+it('模型仅由服务端带密钥调用，校验成功后返回',async()=>{const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(mockPlan(input))}}]}))) as unknown as typeof fetch;const plan=await generateWithProvider(input,'test-key',{fetcher});expect(plan.days).toHaveLength(2);expect(vi.mocked(fetcher).mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions');expect(vi.mocked(fetcher).mock.calls[0][1]?.headers).toMatchObject({Authorization:'Bearer test-key'});});
+it('无效输出只重试一次且不返回畸形数据',async()=>{const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{message:{content:'{"days":[]}'}}]}))) as unknown as typeof fetch;await expect(generateWithProvider(input,'test-key',{fetcher})).rejects.toThrow('未保存无效行程');expect(fetcher).toHaveBeenCalledTimes(2);});
+it('天数不匹配会拒绝，不泄露上游错误或密钥',async()=>{const plan=mockPlan({...input,days:1});const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(plan)}}]}))) as unknown as typeof fetch;await expect(generateWithProvider(input,'secret',{fetcher})).rejects.toThrow('暂时未能生成');});
+it('缺少密钥和非 HTTPS 地址时不发送请求',async()=>{const fetcher=vi.fn() as unknown as typeof fetch;await expect(generateWithProvider(input,'',{fetcher})).rejects.toThrow('密钥');await expect(generateWithProvider(input,'secret',{fetcher,baseUrl:'http://bad.example'})).rejects.toThrow('HTTPS');expect(fetcher).not.toHaveBeenCalled();});

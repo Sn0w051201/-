@@ -1,0 +1,10 @@
+{
+  "users": { "read": false, "write": false },
+  "trips": { "read": false, "write": false },
+  "invitations": { "read": false, "write": false },
+  "shares": { "read": false, "write": false },
+  "receipts": { "read": false, "write": false },
+  "ai_jobs": { "read": false, "write": false },
+  "ai_usage": { "read": false, "write": false },
+  "ai_cache": { "read": false, "write": false }
+}

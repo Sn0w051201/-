@@ -1,0 +1,15 @@
+{
+  "envId": "REPLACE_WITH_YOUR_ENV_ID",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "api",
+      "timeout": 60,
+      "memorySize": 256,
+      "runtime": "Nodejs20.19",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": { "LLM_MODEL": "gpt-4o-mini", "LLM_BASE_URL": "https://api.openai.com/v1", "AI_DAILY_LIMIT": "10" }
+    }
+  ]
+}

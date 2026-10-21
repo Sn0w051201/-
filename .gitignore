@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env*
+!.env.example
+*.local
+*.tsbuildinfo
+playwright-report/
+test-results/
+cloudfunctions/api/index.js
+cloudfunctions/api/node_modules/
+config/cloudbase.local.json
