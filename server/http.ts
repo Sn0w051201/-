@@ -1,3 +1,4 @@
+import { generateHandbookWithProvider } from "./handbook";
 import { ProviderError } from "./provider-error";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { generateWithProvider } from "./llm";
@@ -51,6 +52,7 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
         modelDiagnostics: true,
         structuredPlans: true,
         dailyPlanning: true,
+        completeHandbook: true,
       }),
     );
     return true;
@@ -104,7 +106,22 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
       );
       return true;
     }
-    const plan = await generateWithProvider(
+    const generate =
+      data.task === "handbook"
+        ? (
+            input: unknown,
+            key: string,
+            options: Parameters<typeof generateWithProvider>[2],
+          ) =>
+            generateHandbookWithProvider(
+              input,
+              data.group,
+              data.plan,
+              key,
+              options,
+            )
+        : generateWithProvider;
+    const plan = await generate(
       data.input,
       supplied || process.env.LLM_API_KEY || "",
       { baseUrl: provider[0], model: data.model?.trim() || provider[1] },

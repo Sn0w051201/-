@@ -11,20 +11,26 @@ const activity = day.shape.items.element;
 // The provider requires every property, using null when a coordinate is unknown.
 // Internal and persisted records continue using absent optional coordinates.
 const wireActivity = activity.extend({
+  execution: activity.shape.execution.unwrap().nullable(),
   lat: activity.shape.lat.unwrap().nullable(),
   lng: activity.shape.lng.unwrap().nullable(),
   slot: guideSlotSchema,
   details: recommendationDetailsSchema,
 });
-const wirePlan = planSchema.extend({
+const wirePlan = planSchema.omit({ handbook: true }).extend({
   days: z
-    .array(day.extend({ items: z.array(wireActivity).min(7).max(8) }))
+    .array(
+      day.extend({
+        practical: day.shape.practical.unwrap().nullable(),
+        items: z.array(wireActivity).min(7).max(8),
+      }),
+    )
     .min(1)
     .max(14),
 });
 
 /** Limit to the portable Structured Outputs subset. Length/range constraints remain enforced by Zod. */
-function portableSchema(value: unknown): unknown {
+export function portableSchema(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(portableSchema);
   if (!value || typeof value !== "object") return value;
   const input = value as Record<string, unknown>;
@@ -112,6 +118,7 @@ function integer(value: unknown) {
   return value;
 }
 const fields = [
+  "execution",
   "name",
   "time",
   "duration",
@@ -139,11 +146,13 @@ export function normalizePlanOutput(value: unknown): unknown {
   if (Array.isArray(result.days))
     result.days = result.days.map((d) => {
       if (!record(d)) return d;
-      const next = pick(d, ["theme", "items"]);
+      const next = pick(d, ["theme", "items", "practical"]);
+      if (next.practical === null) delete next.practical;
       if (Array.isArray(next.items))
         next.items = next.items.map((raw) => {
           if (!record(raw)) return raw;
           const item = pick(raw, fields);
+          if (item.execution === null) delete item.execution;
           for (const key of ["lat", "lng"] as const)
             if (item[key] === null) delete item[key];
           for (const key of ["duration", "costMinor"] as const)

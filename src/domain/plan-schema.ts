@@ -1,10 +1,18 @@
 import {
+  travelProfileSchema,
+  executionSchema,
+  dayPracticalSchema,
+  handbookBundleSchema,
+} from "./handbook-schema";
+import {
   guideSlotSchema,
   recommendationDetailsSchema,
 } from "./recommendation-schema";
 import { z } from "zod";
 export const planInputSchema = z
   .object({
+    detailedGuide: z.boolean().optional(),
+    travelProfile: travelProfileSchema.optional(),
     totalDays: z.number().int().min(1).max(14).optional(),
     adjustment: z.string().max(500).optional(),
     previousPlan: z.string().max(120000).optional(),
@@ -41,6 +49,7 @@ export const planInputSchema = z
   );
 export const planSchema = z
   .object({
+    handbook: handbookBundleSchema.optional(),
     title: z.string().min(1).max(100),
     summary: z.string().max(500),
     assumptions: z.array(z.string().max(200)).max(10),
@@ -48,11 +57,13 @@ export const planSchema = z
       .array(
         z
           .object({
+            practical: dayPracticalSchema.optional(),
             theme: z.string().min(1).max(100),
             items: z
               .array(
                 z
                   .object({
+                    execution: executionSchema.optional(),
                     name: z.string().min(1).max(100),
                     time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
                     duration: z.number().int().min(1).max(1440),

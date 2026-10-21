@@ -1,3 +1,5 @@
+import TravelHandbook from "../components/TravelHandbook";
+import { travelProfileSchema } from "../domain/handbook-schema";
 import {
   clearPlanDraft,
   loadPlanDraft,
@@ -47,6 +49,9 @@ export default function Planner() {
     cloud,
   } = useMood();
   const [availableDraft, setAvailableDraft] = useState(loadPlanDraft);
+  const draftNeedsHandbook =
+    availableDraft?.input.detailedGuide &&
+    availableDraft.context?.target === "all";
   const [progress, setProgress] = useState<PlanProgress | null>(null);
   const [stopping, setStopping] = useState(false);
   const control = useRef<AbortController | null>(null);
@@ -59,6 +64,7 @@ export default function Planner() {
       control.current?.abort();
     };
   }, []);
+  const [detailedGuide, setDetailedGuide] = useState(true);
   const [offline, setOffline] = useState(false);
   const [adjust, setAdjust] = useState("");
   const [newTrip, setNewTrip] = useState(!!planningDestination || !trip.id);
@@ -182,7 +188,10 @@ export default function Planner() {
             </h3>
             <p className="my-3">
               {availableDraft.parts.length === availableDraft.input.days
-                ? "完整攻略已生成，可直接恢复查看，不再请求模型。"
+                ? draftNeedsHandbook &&
+                  (availableDraft.handbookParts?.length || 0) < 4
+                  ? `每日路线已完成，手册已保留 ${availableDraft.handbookParts?.length || 0}/4 组，可继续补全。`
+                  : "完整攻略已生成，可直接恢复查看，不再请求模型。"
                 : "可以继续未完成的天数，已完成部分不会重复调用模型。"}
             </p>
             <div className="flex flex-wrap gap-3">
@@ -196,9 +205,14 @@ export default function Planner() {
                   )
                 }
               >
-                {availableDraft.parts.length === availableDraft.input.days
+                {availableDraft.parts.length === availableDraft.input.days &&
+                (!draftNeedsHandbook ||
+                  availableDraft.handbookParts?.length === 4)
                   ? "恢复已生成攻略"
-                  : "继续未完成天数"}
+                  : availableDraft.parts.length === availableDraft.input.days &&
+                      draftNeedsHandbook
+                    ? "继续补全旅行手册"
+                    : "继续未完成天数"}
               </Button>
               <Button
                 variant="secondary"
@@ -229,7 +243,27 @@ export default function Planner() {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
               try {
+                const personal = Object.fromEntries(
+                  [
+                    "departure",
+                    "season",
+                    "arrivalDeparture",
+                    "companions",
+                    "accommodation",
+                    "transport",
+                    "diet",
+                    "mustDo",
+                    "avoid",
+                    "other",
+                    "budgetIncludes",
+                  ].map((key) => [key, String(f.get(key) || "").trim()]),
+                );
                 const data: PlanInput = {
+                  detailedGuide,
+                  travelProfile: travelProfileSchema.parse({
+                    ...personal,
+                    nights: Number(f.get("nights")),
+                  }),
                   destination: String(f.get("destination")).trim(),
                   days: Number(f.get("days")),
                   travelers: Number(f.get("travelers")),
@@ -276,6 +310,14 @@ export default function Planner() {
                   name="days"
                   defaultValue={trip.days.length || 5}
                   disabled={target !== "all"}
+                  onChange={(e) => {
+                    const nights =
+                      e.currentTarget.form?.elements.namedItem("nights");
+                    if (nights instanceof HTMLInputElement)
+                      nights.value = String(
+                        Math.max(0, Number(e.target.value) - 1),
+                      );
+                  }}
                 >
                   {Array.from({ length: 14 }, (_, i) => (
                     <option key={i} value={i + 1}>
@@ -326,6 +368,96 @@ export default function Planner() {
                 required
               />
             </Field>
+            <details className="travel-profile-fields" open>
+              <summary>精细攻略 · 同行与出行条件</summary>
+              <p className="form-note">
+                留空的信息将按假设处理并标注；不会替你编造航班、酒店或联系方式。预算为全部旅伴合计。
+              </p>
+              <div className="form-row">
+                <Field label="出发城市">
+                  <input
+                    name="departure"
+                    maxLength={60}
+                    defaultValue={trip.travelProfile?.departure}
+                    placeholder="例如：上海"
+                  />
+                </Field>
+                <Field label="住宿夜数">
+                  <input
+                    name="nights"
+                    type="number"
+                    min="0"
+                    max="30"
+                    defaultValue={
+                      trip.travelProfile?.nights ??
+                      Math.max(0, trip.days.length - 1)
+                    }
+                    required
+                  />
+                </Field>
+              </div>
+              {(
+                [
+                  ["season", "季节与天气偏好", "例如：秋季，避开雨天徒步", 100],
+                  [
+                    "arrivalDeparture",
+                    "到达与返程时间",
+                    "例如：首日14点抵达，末日18点高铁",
+                    200,
+                  ],
+                  [
+                    "companions",
+                    "同行人构成与体力",
+                    "例如：2位成人+6岁孩子，每天步行不超过5公里",
+                    300,
+                  ],
+                  [
+                    "accommodation",
+                    "住宿偏好 / 房型 / 早餐",
+                    "例如：地铁附近酒店，双床房，含早、有电梯",
+                    200,
+                  ],
+                  [
+                    "transport",
+                    "交通偏好",
+                    "例如：公共交通优先，累时打车",
+                    150,
+                  ],
+                  ["diet", "饮食禁忌与过敏", "例如：不吃辣、花生过敏", 200],
+                  ["mustDo", "必去 / 必吃 / 必体验", "没有可填无", 300],
+                  [
+                    "avoid",
+                    "不想去与避雷",
+                    "例如：不爬山、不排队超过30分钟",
+                    300,
+                  ],
+                  [
+                    "budgetIncludes",
+                    "预算包含哪些费用",
+                    "例如：含往返交通住宿餐饮门票，不含购物",
+                    200,
+                  ],
+                  ["other", "其他要求", "例如：婴儿车、无障碍、摄影时段", 300],
+                ] as const
+              ).map(([name, label, placeholder, maxLength]) => (
+                <Field key={name} label={label}>
+                  <input
+                    name={name}
+                    maxLength={maxLength}
+                    defaultValue={trip.travelProfile?.[name]}
+                    placeholder={placeholder}
+                  />
+                </Field>
+              ))}
+            </details>
+            <label className="mb-4 block">
+              <input
+                type="checkbox"
+                checked={detailedGuide}
+                onChange={(e) => setDetailedGuide(e.target.checked)}
+              />{" "}
+              生成完整精细攻略（路线后补全4组手册，增加模型用量）
+            </label>
             <Field label="旅行节奏">
               <div className="pace-options">
                 {(
@@ -513,9 +645,11 @@ export default function Planner() {
               <p aria-live="polite">
                 {offline
                   ? "正在整理离线参考路线。"
-                  : progress
-                    ? `已完成 ${progress.completed}/${progress.total} 天 · ${stopping ? "正在保留当前一天的结果…" : `正在生成第 ${progress.currentDay} 天`}`
-                    : "正在准备逐日生成…"}
+                  : progress?.phase === "handbook"
+                    ? `每日路线已完成 · 旅行手册已完成 ${progress.guideCompleted}/${progress.guideTotal} 组`
+                    : progress
+                      ? `已完成 ${progress.completed}/${progress.total} 天 · ${stopping ? "正在保留当前一天的结果…" : `正在生成第 ${progress.currentDay} 天`}`
+                      : "正在准备逐日生成…"}
               </p>
               <div className="generation-progress">
                 <span />
@@ -534,7 +668,7 @@ export default function Planner() {
                     setStopping(true);
                   }}
                 >
-                  {stopping ? "等待当前一天结束…" : "完成当前一天后停止"}
+                  {stopping ? "等待当前请求结束…" : "完成当前请求后停止"}
                 </Button>
               )}
               {progress && !progress.persisted && (
@@ -550,6 +684,7 @@ export default function Planner() {
                 {offline ? "离线参考 · 非 AI" : "AI 生成 · 请核验"}
               </span>
               <h2>{result.title}</h2>
+              <h3>一、攻略概览</h3>
               <p>{result.summary}</p>
               {input?.references && (
                 <div className="provided-references">
@@ -565,6 +700,7 @@ export default function Planner() {
                   ))}
                 </div>
               </div>
+              <TravelHandbook plan={result} input={input || undefined} />
               {result.days.map((d, i) => (
                 <div className="preview-day" key={i}>
                   <span>
@@ -574,6 +710,12 @@ export default function Planner() {
                     ).padStart(2, "0")}
                   </span>
                   <h3>{d.theme}</h3>
+                  {d.practical && (
+                    <p className="form-note">
+                      机动留白 {d.practical.bufferMinutes} 分钟 ·{" "}
+                      {d.practical.bufferPlan}
+                    </p>
+                  )}
                   <Coverage items={d.items} />
                   {d.items.map((a, j) => (
                     <article className="detailed-preview-item" key={j}>
@@ -600,7 +742,7 @@ export default function Planner() {
               ))}
               <div className="plan-apply">
                 <p>
-                  保存时自动生成行前清单和费用预估；改变人数时会创建新旅行。
+                  保存时自动生成行前清单（含7／3／1天检查）和费用预估；改变人数时会创建新旅行。
                 </p>
                 <Field label="追问调整（如：第二天换成室内项目）">
                   <textarea

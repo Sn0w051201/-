@@ -56,3 +56,7 @@
 AppState 增加可选 `favorites`, `customDestinations`, `destinationEdits`, `hiddenDestinations`, `feed`, `preferences.theme`；Trip 增加可选 `visited`, `photos`，Expense 增加可选 `estimateId`。费用预估从活动推导，绝不自动写成实际支出。照片压缩 JPEG 保存在本地，JSON 备份包含照片；模型 Key/代理令牌用独立浏览器键存储，不进入备份。
 
 本地模式总数据上限4.5MB，云端旅行文档仍保持900KB。新增照片墙仅本地可用；未实现照片同步。发现收藏/主题云同步待接入，原数据库规则不因此放宽。
+
+### 精细攻略可选字段
+
+`trips.travelProfile` 保存出发地、夜数、同行体力、住宿交通饮食及偏好；`guideSummary/guideAssumptions` 保存概要与假设；`handbook.sections` 是固定key和固定列数的九组表格，配合每日路线、独立预算形成十一部分攻略；`handbook.budget` 是七类整程全员预算区间（`minMinor/maxMinor`，人民币整数分）。`days[].practical` 保存机动时间与四类日常替代；`days[].items[].execution` 保存优先级、体力、人群、营业核验与费用区间。新字段均可选，旧备份无需迁移。含同行个人偏好的JSON备份只在可信范围分享。生成中的分组草稿仍在浏览器独立存储，不进入数据库和分享快照。

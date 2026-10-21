@@ -1,3 +1,5 @@
+import { handbookGroups, validateHandbook } from "../domain/handbook-schema";
+import type { Handbook } from "../domain/handbook-schema";
 import { planInputSchema, planSchema } from "../domain/plan-schema";
 import type { GeneratedPlan, PlanInput } from "../domain/types";
 import { assertGuideQuality } from "../domain/plan-quality";
@@ -9,6 +11,9 @@ export interface PlanContext {
   newTrip: boolean;
 }
 export interface PlanProgress {
+  phase?: "days" | "handbook";
+  guideCompleted?: number;
+  guideTotal?: number;
   completed: number;
   total: number;
   currentDay: number;
@@ -20,9 +25,15 @@ export interface PlanDraft {
   input: PlanInput;
   context?: PlanContext;
   parts: GeneratedPlan[];
+  handbookParts?: Handbook[];
   updatedAt: number;
 }
 export interface PlanJobOptions {
+  requestHandbook?: (
+    input: PlanInput,
+    group: number,
+    plan: GeneratedPlan,
+  ) => Promise<Handbook>;
   context?: PlanContext;
   identity?: string;
   onProgress?: (progress: PlanProgress) => void;
@@ -44,7 +55,12 @@ function valid(value: unknown): value is PlanDraft {
     )
       return false;
     const input = planInputSchema.parse(d.input);
-    if (d.parts.length > input.days) return false;
+    if (
+      d.parts.length > input.days ||
+      (d.handbookParts?.length || 0) > handbookGroups.length
+    )
+      return false;
+    d.handbookParts?.forEach((part, i) => validateHandbook(part, i));
     for (const [index, part] of d.parts.entries()) {
       planSchema.parse(part);
       const budget =
@@ -153,6 +169,9 @@ async function performDailyPlan(
       "总预算过低，无法分配到每一天，请先调整预算。",
       "output",
     );
+  const withHandbook =
+    input.detailedGuide &&
+    (!options.context || options.context.target === "all");
   const signature = JSON.stringify({
     input,
     identity: options.identity || "",
@@ -162,6 +181,8 @@ async function performDailyPlan(
   const draft: PlanDraft =
     old?.signature === signature &&
     (old.parts.length < input.days ||
+      (withHandbook &&
+        (old.handbookParts?.length || 0) < handbookGroups.length) ||
       options.resume ||
       old.updatedAt >= requestedAt)
       ? structuredClone(old)
@@ -234,7 +255,71 @@ async function performDailyPlan(
       "output",
     );
   const result = merge(input, draft.parts);
+  if (input.detailedGuide) {
+    const missing = (
+      [
+        ["departure", "出发地"],
+        ["arrivalDeparture", "抵达返程时间"],
+        ["companions", "同行年龄体力"],
+        ["accommodation", "住宿房型早餐"],
+        ["transport", "交通偏好"],
+        ["diet", "饮食禁忌"],
+        ["budgetIncludes", "预算覆盖范围"],
+      ] as const
+    )
+      .filter(([key]) => !input.travelProfile?.[key])
+      .map(([, label]) => label);
+    if (missing.length)
+      result.assumptions = [
+        `待确认：${missing.join("、")}；相关安排仅按通用条件估算，不代表已确认适配。`,
+        ...result.assumptions,
+      ].slice(0, 10);
+  }
   assertGuideQuality(result, input);
+  if (withHandbook) {
+    draft.handbookParts ||= [];
+    for (
+      let group = draft.handbookParts.length;
+      group < handbookGroups.length;
+      group++
+    ) {
+      if (options.signal?.aborted)
+        throw new AIRequestError(
+          "生成已停止，路线与已完成手册均已保留，可继续。",
+          "output",
+        );
+      options.onProgress?.({
+        phase: "handbook",
+        completed: input.days,
+        total: input.days,
+        currentDay: input.days,
+        guideCompleted: group,
+        guideTotal: handbookGroups.length,
+        persisted,
+      });
+      try {
+        if (!options.requestHandbook)
+          throw new Error("当前服务不支持完整旅行手册，请更新服务后重试。");
+        const part = validateHandbook(
+          await options.requestHandbook(input, group, result),
+          group,
+        );
+        if (epoch !== currentEpoch) throw new Error("生成草稿已清除。");
+        draft.handbookParts.push(part);
+        draft.updatedAt = Math.max(Date.now(), draft.updatedAt + 1);
+        persisted = store(draft);
+      } catch (e) {
+        throw new AIRequestError(
+          `路线已完成；旅行手册第 ${group + 1} 组未完成（已保留 ${draft.handbookParts.length}/4 组）。${(e as Error).message} 继续时不会重生成路线或已完成章节。`,
+          e instanceof AIRequestError ? e.kind : "output",
+        );
+      }
+    }
+    result.handbook = validateHandbook({
+      sections: draft.handbookParts.flatMap((p) => p.sections),
+      budget: draft.handbookParts.flatMap((p) => p.budget),
+    });
+  }
   return result;
 }
 

@@ -5624,3 +5624,19 @@ h1 {
   }
 }
 .inline-error a{display:inline-block;color:inherit;text-decoration:underline;margin:8px 0 0 10px}.inline-error button{margin-top:8px}
+
+/* Detailed travel handbook: keep wide comparison tables inside their own scroll region. */
+.planner-result,.travel-handbook,.handbook-section,.daily-guide { min-width:0; }
+.travel-profile-fields { border:1px solid var(--line,#ded6cc);border-radius:16px;padding:16px;margin:18px 0; }
+.travel-profile-fields summary,.handbook-section summary { cursor:pointer;font-weight:600;padding:12px 0; }
+.handbook-section { border-top:1px solid var(--line,#ded6cc);margin-top:16px; }
+.guide-table-scroll { max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;border:1px solid var(--line,#ded6cc);border-radius:12px;margin:12px 0; }
+.guide-table { border-collapse:collapse;width:100%;font-size:13px;line-height:1.65; }
+.guide-table th,.guide-table td { padding:12px;min-width:145px;vertical-align:top;text-align:left;border-bottom:1px solid var(--line,#ded6cc);white-space:pre-line;overflow-wrap:anywhere; }
+.guide-table th { background:rgba(146,116,163,.12);font-weight:600; }
+.guide-table tr:last-child td {border-bottom:0;}
+.daily-contingency { background:rgba(146,116,163,.08);border-radius:12px;padding:16px;margin:14px 0; }
+.daily-contingency dl {display:grid;gap:10px;margin-top:12px;}
+.daily-contingency dl div {display:grid;grid-template-columns:85px minmax(0,1fr);gap:10px;}
+.daily-contingency dt {font-weight:600;} .daily-contingency dd {margin:0;}
+.travel-handbook h3 {margin:16px 0 10px;}

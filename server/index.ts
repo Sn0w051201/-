@@ -1,3 +1,4 @@
+import { generateHandbookWithProvider } from "./handbook";
 import cloudbase from "@cloudbase/node-sdk";
 import { randomBytes, createHash } from "node:crypto";
 import { z } from "zod";
@@ -162,7 +163,7 @@ export async function main(event: Record<string, unknown>) {
       });
       return { ok: true, data: saved };
     }
-    if (action === "generatePlan") {
+    if (action === "generatePlan" || action === "generateHandbook") {
       const input = planInputSchema.parse(event.input);
       const key = process.env.LLM_API_KEY || "";
       if (!key) throw new Error("服务端尚未配置模型密钥，请联系管理员");
@@ -185,14 +186,31 @@ export async function main(event: Record<string, unknown>) {
             date: new Date().toISOString().slice(0, 10),
           });
       });
-      const inputHash = hash(JSON.stringify(input));
+      const inputHash = hash(
+        JSON.stringify({ input, action, group: event.group, plan: event.plan }),
+      );
       const cached = (await get("ai_cache", hash(userId + inputHash))) as
         { result: unknown; expiresAt: number } | undefined;
       if (cached && cached.expiresAt > Date.now())
         return { ok: true, data: cached.result };
       const started = Date.now();
       try {
-        const result = await generateWithProvider(input, key, {
+        const generate =
+          action === "generateHandbook"
+            ? (
+                input: unknown,
+                key: string,
+                options: Parameters<typeof generateWithProvider>[2],
+              ) =>
+                generateHandbookWithProvider(
+                  input,
+                  event.group,
+                  event.plan,
+                  key,
+                  options,
+                )
+            : generateWithProvider;
+        const result = await generate(input, key, {
           baseUrl: process.env.LLM_BASE_URL,
           model: process.env.LLM_MODEL,
         });
@@ -200,29 +218,25 @@ export async function main(event: Record<string, unknown>) {
           .collection("ai_cache")
           .doc(hash(userId + inputHash))
           .set({ result, expiresAt: Date.now() + 300000 });
-        await db
-          .collection("ai_jobs")
-          .add({
-            userId,
-            inputHash,
-            promptVersion: "moodnomad-v1",
-            model: process.env.LLM_MODEL || "gpt-4o-mini",
-            status: "succeeded",
-            durationMs: Date.now() - started,
-            createdAt: Date.now(),
-          });
+        await db.collection("ai_jobs").add({
+          userId,
+          inputHash,
+          promptVersion: "moodnomad-v1",
+          model: process.env.LLM_MODEL || "gpt-4o-mini",
+          status: "succeeded",
+          durationMs: Date.now() - started,
+          createdAt: Date.now(),
+        });
         return { ok: true, data: result };
       } catch {
-        await db
-          .collection("ai_jobs")
-          .add({
-            userId,
-            inputHash,
-            promptVersion: "moodnomad-v1",
-            status: "failed",
-            durationMs: Date.now() - started,
-            createdAt: Date.now(),
-          });
+        await db.collection("ai_jobs").add({
+          userId,
+          inputHash,
+          promptVersion: "moodnomad-v1",
+          status: "failed",
+          durationMs: Date.now() - started,
+          createdAt: Date.now(),
+        });
         throw new Error("攻略暂时未能生成，请稍后重试；未写入行程");
       }
     }
@@ -323,15 +337,12 @@ export async function main(event: Record<string, unknown>) {
         cloudPath: `receipts/${tripId}/${hash(userId).slice(0, 16)}/${token()}.jpg`,
         fileContent: body,
       });
-      await db
-        .collection("receipts")
-        .doc(hash(result.fileID))
-        .set({
-          fileId: result.fileID,
-          tripId,
-          createdBy: userId,
-          createdAt: Date.now(),
-        });
+      await db.collection("receipts").doc(hash(result.fileID)).set({
+        fileId: result.fileID,
+        tripId,
+        createdBy: userId,
+        createdAt: Date.now(),
+      });
       return { ok: true, data: result.fileID };
     }
     if (action === "receiptUrl") {

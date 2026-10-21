@@ -1,4 +1,7 @@
-import { generateDailyPlan } from "./plan-job";
+import { enrichReference } from "./handbook-reference";
+import { validateHandbook } from "../domain/handbook-schema";
+import type { Handbook } from "../domain/handbook-schema";
+import { generateDailyPlan, planContextText } from "./plan-job";
 import type { PlanJobOptions } from "./plan-job";
 import { AIRequestError } from "./ai-errors";
 import { detailedPlan } from "../data/guides";
@@ -9,11 +12,17 @@ export { planInputSchema, planSchema } from "../domain/plan-schema";
 import type { GeneratedPlan, PlanInput } from "../domain/types";
 export function mockPlan(input: PlanInput): GeneratedPlan {
   planInputSchema.parse(input);
-  return detailedPlan(input);
+  return enrichReference(input, detailedPlan(input));
 }
-export async function requestPlan(input: PlanInput): Promise<GeneratedPlan> {
+async function requestAI(
+  input: PlanInput,
+  handbook?: { group: number; plan: GeneratedPlan },
+): Promise<unknown> {
   if (import.meta.env.VITE_DATA_MODE === "cloud") {
-    return planSchema.parse(await cloudCall("generatePlan", { input }));
+    return cloudCall(handbook ? "generateHandbook" : "generatePlan", {
+      input,
+      ...handbook,
+    });
   }
   const settings = getAISettings();
   let url: string;
@@ -34,11 +43,12 @@ export async function requestPlan(input: PlanInput): Promise<GeneratedPlan> {
       },
       body: JSON.stringify({
         input,
+        ...(handbook ? { task: "handbook", ...handbook } : {}),
         provider: settings.provider,
         model: settings.model,
         key: settings.key,
       }),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(handbook ? 180000 : 120000),
     });
   } catch (e) {
     if (["TimeoutError", "AbortError"].includes((e as Error).name))
@@ -86,6 +96,28 @@ export async function requestPlan(input: PlanInput): Promise<GeneratedPlan> {
     throw new AIRequestError(error, kind);
   }
 
+  return data;
+}
+export async function requestHandbook(
+  input: PlanInput,
+  group: number,
+  plan: GeneratedPlan,
+): Promise<Handbook> {
+  const data = await requestAI(
+    { ...input, previousPlan: undefined },
+    { group, plan: JSON.parse(planContextText(plan)) },
+  );
+  try {
+    return validateHandbook(data, group);
+  } catch {
+    throw new AIRequestError(
+      "旅行手册未返回完整章节。请确认Render已部署支持完整手册的最新版本，再继续生成。",
+      "output",
+    );
+  }
+}
+export async function requestPlan(input: PlanInput): Promise<GeneratedPlan> {
+  const data = await requestAI(input);
   const parsed = planSchema.safeParse(data);
   if (!parsed.success)
     throw new AIRequestError(
@@ -111,6 +143,7 @@ export async function generatePlan(
   }
   return generateDailyPlan(input, requestPlan, {
     ...options,
+    requestHandbook,
     identity: JSON.stringify({
       provider: settings.provider,
       model: settings.model,

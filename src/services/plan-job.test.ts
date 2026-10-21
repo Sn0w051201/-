@@ -200,3 +200,44 @@ it("清除草稿后，仍在返回的旧请求不会恢复已丢弃的数据", a
   await expect(pending).rejects.toThrow("生成草稿已清除");
   expect(loadPlanDraft()).toBeNull();
 });
+it("完整手册失败后保留路线与章节，继续只补未完成分组，保存生成检查清单", async () => {
+  const { handbookGroups } = await import("../domain/handbook-schema");
+  const complete = { ...input, detailedGuide: true };
+  const route = mockPlan(complete);
+  const request = vi.fn(async (data) => {
+    const value = mockPlan(data);
+    delete value.handbook;
+    return value;
+  });
+  const groups: number[] = [];
+  let fail = true;
+  const requestHandbook = vi.fn(async (_data, index: number) => {
+    groups.push(index);
+    if (index === 2 && fail) throw new AIRequestError("模拟手册故障", "model");
+    return {
+      sections: route.handbook!.sections.filter((s) =>
+        (handbookGroups[index].keys as readonly string[]).includes(s.key),
+      ),
+      budget: index === 3 ? route.handbook!.budget : [],
+    };
+  });
+  await expect(
+    generateDailyPlan(complete, request, { context: scope, requestHandbook }),
+  ).rejects.toThrow("已保留 2/4 组");
+  expect(loadPlanDraft()?.parts).toHaveLength(5);
+  expect(loadPlanDraft()?.handbookParts).toHaveLength(2);
+  fail = false;
+  const result = await generateDailyPlan(complete, request, {
+    context: scope,
+    requestHandbook,
+    resume: true,
+  });
+  expect(request).toHaveBeenCalledTimes(5);
+  expect(groups).toEqual([0, 1, 2, 2, 3]);
+  expect(result.handbook?.sections).toHaveLength(9);
+  const before = seedState().trips[0];
+  const saved = applyPlan(before, result, complete);
+  expect(saved.checklist.some((c) => c.title.includes("出发前7天"))).toBe(true);
+  expect(saved.expenses).toEqual(before.expenses);
+  expect(saved.handbook).toEqual(result.handbook);
+});

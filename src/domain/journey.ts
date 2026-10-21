@@ -43,6 +43,7 @@ export function applyPlan(
   const generated = plan.days.map((d) => ({
     id: uid(),
     theme: d.theme,
+    practical: d.practical,
     items: d.items.map((a) => ({ ...a, id: uid(), done: false })),
   }));
   const days =
@@ -58,6 +59,12 @@ export function applyPlan(
       title: `出发前核验${input.destination}天气与景点预约`,
       category: "待办" as const,
     },
+    ...(
+      plan.handbook?.sections.find((s) => s.key === "checkpoints")?.rows || []
+    ).map((row) => ({
+      title: `${row[0]}：${row[1]}`.slice(0, 100),
+      category: "待办" as const,
+    })),
     ...days
       .filter((_, i) => dayIndex === undefined || i === dayIndex)
       .map((d, i) => ({
@@ -75,6 +82,10 @@ export function applyPlan(
     ...trip,
     ...(dayIndex === undefined
       ? {
+          handbook: plan.handbook,
+          travelProfile: input.travelProfile,
+          guideSummary: plan.summary,
+          guideAssumptions: plan.assumptions,
           destination: input.destination,
           startDate: input.startDate || trip.startDate,
           budgetMinor: input.budgetMinor,
@@ -85,6 +96,14 @@ export function applyPlan(
         }
       : {}),
     days,
+    ...(dayIndex !== undefined && trip.handbook
+      ? {
+          guideAssumptions: [
+            "已调整单日路线：原旅行手册保留供参考，请重新核验景点、交通与预算。",
+            ...(trip.guideAssumptions || []),
+          ].slice(0, 10),
+        }
+      : {}),
     checklist: [
       ...trip.checklist,
       ...suggestions
@@ -93,7 +112,9 @@ export function applyPlan(
           ...c,
           id: uid(),
           assigneeId: trip.ownerId,
-          dueDate: due,
+          dueDate: c.title.match(/^出发前([731])天/)
+            ? addDays(due, -Number(c.title.match(/^出发前([731])天/)![1]))
+            : due,
           private: false,
           createdBy: actorId,
           done: false,

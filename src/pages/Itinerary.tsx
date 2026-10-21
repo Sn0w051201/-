@@ -1,3 +1,4 @@
+import TravelHandbook from "../components/TravelHandbook";
 import TripEditor from "../components/TripEditor";
 import Recommendation, {
   Coverage,
@@ -94,6 +95,24 @@ export default function Itinerary() {
           </Button>
         }
       />
+      {trip.handbook && (
+        <TravelHandbook
+          saved
+          plan={{
+            title: trip.title,
+            summary:
+              trip.guideSummary ||
+              "已保存的旅行手册。修改日程后请重新核对相关建议。",
+            assumptions: trip.guideAssumptions || [],
+            days: trip.days,
+            handbook: trip.handbook,
+          }}
+          input={{
+            travelers: trip.members.length,
+            travelProfile: trip.travelProfile,
+          }}
+        />
+      )}
       <div className="trip-select-row">
         <label>
           正在计划

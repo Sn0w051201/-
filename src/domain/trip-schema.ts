@@ -1,4 +1,11 @@
 import {
+  travelProfileSchema,
+  executionSchema,
+  dayPracticalSchema,
+  handbookBundleSchema,
+  validateHandbook,
+} from "./handbook-schema";
+import {
   guideSlotSchema,
   recommendationDetailsSchema,
 } from "./recommendation-schema";
@@ -16,6 +23,7 @@ const date = z
   }, "日期无效");
 const activity = z
   .object({
+    execution: executionSchema.optional(),
     id,
     name: z.string().trim().min(1).max(100),
     time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
@@ -104,6 +112,10 @@ const photo = z
   .strict();
 export const tripSchema = z
   .object({
+    handbook: handbookBundleSchema.optional(),
+    travelProfile: travelProfileSchema.optional(),
+    guideSummary: z.string().max(500).optional(),
+    guideAssumptions: z.array(z.string().max(200)).max(10).optional(),
     photos: z.array(photo).max(30).optional(),
     visited: z.boolean().optional(),
     id,
@@ -119,6 +131,7 @@ export const tripSchema = z
       .array(
         z
           .object({
+            practical: dayPracticalSchema.optional(),
             id,
             theme: z.string().min(1).max(100),
             items: z.array(activity).max(8),
@@ -141,6 +154,9 @@ export const tripSchema = z
   .strict();
 export function validateTrip(input: unknown, maxBytes = 900000): Trip {
   const t = tripSchema.parse(input);
+  if (t.handbook) {
+    validateHandbook(t.handbook);
+  }
   const ids = t.members.map((m) => m.id);
   const unique = (values: string[]) => new Set(values).size === values.length;
   if (

@@ -1,4 +1,9 @@
 import { test, expect } from "@playwright/test";
+import {
+  enrichReference,
+  referenceHandbook,
+} from "../../src/services/handbook-reference";
+import { handbookGroups } from "../../src/domain/handbook-schema";
 import { detailedPlan } from "../../src/data/guides";
 const input = {
   destination: "大理",
@@ -63,10 +68,26 @@ test("真实 AI 接口请求、追问、失败状态；备份不含密钥", asyn
   await page.route("**/api/ai", async (r) => {
     const body = r.request().postDataJSON();
     expect(body.key).toBe("test-private-key");
-    expect(body.input.days).toBe(1);
-    if (requests >= 5) expect(body.input.adjustment).toBe("第二天换成室内项目");
+    if (body.task !== "handbook") expect(body.input.days).toBe(1);
+    if (requests >= 9) expect(body.input.adjustment).toBe("第二天换成室内项目");
     requests++;
-    await r.fulfill({ json: detailedPlan(body.input) });
+    if (body.task === "handbook") {
+      const all = referenceHandbook(body.input, body.plan);
+      await r.fulfill({
+        json: {
+          sections: all.sections.filter((s) =>
+            (handbookGroups[body.group].keys as readonly string[]).includes(
+              s.key,
+            ),
+          ),
+          budget: body.group === 3 ? all.budget : [],
+        },
+      });
+    } else {
+      const result = enrichReference(body.input, detailedPlan(body.input));
+      delete result.handbook;
+      await r.fulfill({ json: result });
+    }
   });
   await nav(page, "AI 灵感规划");
   await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
@@ -80,7 +101,7 @@ test("真实 AI 接口请求、追问、失败状态；备份不含密钥", asyn
   await expect(
     page.getByText("AI 生成 · 请核验", { exact: true }),
   ).toBeVisible();
-  expect(requests).toBe(10);
+  expect(requests).toBe(18);
   await page.unroute("**/api/ai");
   await page.route("**/api/ai", (r) =>
     r.fulfill({ status: 400, json: { error: "密钥无效，请检查配置" } }),
@@ -265,6 +286,20 @@ test("逐日生成显示进度，失败刷新后继续，已完成日期不重�
   const offsets: number[] = [];
   await page.route("**/api/ai", async (r) => {
     const body = r.request().postDataJSON();
+    if (body.task === "handbook") {
+      const all = referenceHandbook(body.input, body.plan);
+      await r.fulfill({
+        json: {
+          sections: all.sections.filter((s) =>
+            (handbookGroups[body.group].keys as readonly string[]).includes(
+              s.key,
+            ),
+          ),
+          budget: body.group === 3 ? all.budget : [],
+        },
+      });
+      return;
+    }
     expect(body.input.days).toBe(1);
     expect(body.input.totalDays).toBe(5);
     offsets.push(body.input.dayOffset);
@@ -276,7 +311,9 @@ test("逐日生成显示进度，失败刷新后继续，已完成日期不重�
       });
       return;
     }
-    await r.fulfill({ json: detailedPlan(body.input) });
+    const result = enrichReference(body.input, detailedPlan(body.input));
+    delete result.handbook;
+    await r.fulfill({ json: result });
   });
   await page.goto("/#planner");
   await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
@@ -312,6 +349,96 @@ test("逐日生成显示进度，失败刷新后继续，已完成日期不重�
   expect(data.state.trips[0].expenses.some((e: any) => e.estimateId)).toBe(
     false,
   );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+test("精细攻略传入旅行条件，手册失败后刷新续写、下载和保存检查项", async ({
+  page,
+}) => {
+  const groups: number[] = [];
+  let dayCalls = 0;
+  let fail = true;
+  await page.route("**/api/ai", async (r) => {
+    const body = r.request().postDataJSON();
+    expect(body.input.travelProfile.diet).toBe("花生过敏，不吃辣");
+    expect(body.input.travelProfile.departure).toBe("上海");
+    if (body.task === "handbook") {
+      groups.push(body.group);
+      if (fail && body.group === 1) {
+        await r.fulfill({
+          status: 422,
+          json: { code: "MODEL_OUTPUT_LIMIT", error: "模拟手册截断" },
+        });
+        return;
+      }
+      const all = referenceHandbook(body.input, body.plan);
+      await r.fulfill({
+        json: {
+          sections: all.sections.filter((s) =>
+            (handbookGroups[body.group].keys as readonly string[]).includes(
+              s.key,
+            ),
+          ),
+          budget: body.group === 3 ? all.budget : [],
+        },
+      });
+      return;
+    }
+    dayCalls++;
+    const plan = enrichReference(body.input, detailedPlan(body.input));
+    delete plan.handbook;
+    await r.fulfill({ json: plan });
+  });
+  await page.goto("/#planner");
+  await page.getByLabel("几天的旅行").selectOption("2");
+  await expect(page.getByLabel("住宿夜数")).toHaveValue("1");
+  await page.getByLabel("出发城市").fill("上海");
+  await page.getByLabel("饮食禁忌与过敏").fill("花生过敏，不吃辣");
+  await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("已保留 1/4 组");
+  fail = false;
+  await page.reload();
+  await page
+    .getByRole("button", { name: "继续补全旅行手册", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "可执行旅行手册", exact: true }),
+  ).toBeVisible();
+  expect(dayCalls).toBe(2);
+  expect(groups).toEqual([0, 1, 1, 2, 3]);
+  await page.getByText("三、每日行程表 · 2天", { exact: true }).click();
+  await expect(page.getByText("机动留白 · 60分钟").first()).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载完整攻略", exact: true }).click();
+  const stream = await (await download).createReadStream();
+  let markdown = "";
+  for await (const c of stream!) markdown += c;
+  expect(markdown).toContain("十一、应急与备选");
+  expect(markdown).toContain("出发前7天");
+  await page
+    .getByRole("button", { name: "保存到当前旅行", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "已保存到行程", exact: true }),
+  ).toBeDisabled();
+  await nav(page, "我的行程");
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "可执行旅行手册", exact: true }),
+  ).toBeVisible();
+  const state = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("moodnomad-web-v1")!),
+  );
+  expect(state.trips[0].handbook.sections).toHaveLength(9);
+  expect(
+    state.trips[0].checklist.some(
+      (c: { title: string; dueDate: string }) =>
+        c.title.startsWith("出发前7天") && c.dueDate === "2026-10-30",
+    ),
+  ).toBe(true);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

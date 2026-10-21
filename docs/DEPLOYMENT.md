@@ -130,3 +130,9 @@ OpenAI 默认 `gpt-4o-mini`、GPT-4o 当前别名/已知结构化快照、GPT-4.
 草稿键 `moodnomad-ai-plan-draft-v1` 最多保存最近一份、7天有效，记录输入、公开模型/代理身份、旅程范围与已通过校验的日期，不含配置里的Key或令牌。优先localStorage、其次sessionStorage，均不可用时暂存内存并提醒。失败/刷新可继续未完成日期；完成草稿可直接恢复查看。多标签页使用 Web Locks 串行协调，缺少该API时在本页面排队。停止操作会等当前日期返回并保存，随后停止；不能承诺取消已经发给模型的费用。
 
 保存旅行成功、恢复示例或导入备份时清除草稿；丢弃草稿不会删除正式旅行。前端的新请求字段需要同时部署本次后端；健康检查 `dailyPlanning:true` 表示已支持逐日协议。CloudBase 模式也按天计入 `AI_DAILY_LIMIT`，长行程或多次追问可能触及原有每日限额，可由管理员合理设置，不在客户端绕过。
+
+### 精细攻略接口升级
+
+部署新前端时同步更新Render或CloudBase后端。Render在服务页选择 **Manual Deploy → Deploy latest commit**，构建用 `npm ci && npm run build`，启动用 `npm run start:server`。公开健康检查 `/api/health` 应含 `completeHandbook:true`；已有模型密钥、CORS和代理地址配置继续使用。该标志只表示接口版本，不代表模型余额或配置有效。
+
+完整攻略默认需要每天一次及4组手册请求，失败继续不会重复已保存结果。保留现有每分钟12次请求限制，达到限流时稍后继续；CloudBase管理员需确认 `AI_DAILY_LIMIT` 足够本人需求与费用预算。未提供真实API凭据时，可先用离线参考验证完整展示、下载、保存和清单流程。

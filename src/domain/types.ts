@@ -1,3 +1,10 @@
+import type { z } from "zod";
+import type {
+  TravelProfile,
+  Handbook,
+  executionSchema,
+  dayPracticalSchema,
+} from "./handbook-schema";
 export type Role = "owner" | "editor" | "viewer";
 export interface Member {
   id: string;
@@ -35,6 +42,7 @@ export interface RecommendationDetails {
   sources: RecommendationSource[];
 }
 export interface Activity {
+  execution?: z.infer<typeof executionSchema>;
   id: string;
   name: string;
   time: string;
@@ -50,6 +58,7 @@ export interface Activity {
   details?: RecommendationDetails;
 }
 export interface Day {
+  practical?: z.infer<typeof dayPracticalSchema>;
   id: string;
   theme: string;
   items: Activity[];
@@ -90,6 +99,10 @@ export interface TravelPhoto {
   createdBy: string;
 }
 export interface Trip {
+  handbook?: Handbook;
+  travelProfile?: TravelProfile;
+  guideSummary?: string;
+  guideAssumptions?: string[];
   visited?: boolean;
   photos?: TravelPhoto[];
   id: string;
@@ -149,6 +162,8 @@ export interface AppState {
   userId: string;
 }
 export interface PlanInput {
+  detailedGuide?: boolean;
+  travelProfile?: TravelProfile;
   totalDays?: number;
   adjustment?: string;
   previousPlan?: string;
@@ -168,7 +183,12 @@ export interface GeneratedPlan {
   title: string;
   summary: string;
   assumptions: string[];
-  days: Array<{ theme: string; items: Omit<Activity, "id" | "done">[] }>;
+  handbook?: Handbook;
+  days: Array<{
+    theme: string;
+    practical?: z.infer<typeof dayPracticalSchema>;
+    items: Omit<Activity, "id" | "done">[];
+  }>;
 }
 export const categories: Category[] = [
   "餐饮",
