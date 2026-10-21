@@ -63,8 +63,10 @@ test("真实 AI 接口请求、追问、失败状态；备份不含密钥", asyn
   await page.route("**/api/ai", async (r) => {
     const body = r.request().postDataJSON();
     expect(body.key).toBe("test-private-key");
-    if (requests++) expect(body.input.adjustment).toBe("第二天换成室内项目");
-    await r.fulfill({ json: detailedPlan(input) });
+    expect(body.input.days).toBe(1);
+    if (requests >= 5) expect(body.input.adjustment).toBe("第二天换成室内项目");
+    requests++;
+    await r.fulfill({ json: detailedPlan(body.input) });
   });
   await nav(page, "AI 灵感规划");
   await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
@@ -78,7 +80,7 @@ test("真实 AI 接口请求、追问、失败状态；备份不含密钥", asyn
   await expect(
     page.getByText("AI 生成 · 请核验", { exact: true }),
   ).toBeVisible();
-  expect(requests).toBe(2);
+  expect(requests).toBe(10);
   await page.unroute("**/api/ai");
   await page.route("**/api/ai", (r) =>
     r.fulfill({ status: 400, json: { error: "密钥无效，请检查配置" } }),
@@ -253,4 +255,66 @@ test("OpenAI 额度不足不提示重填Key，模型不存在时提供配置入�
   await expect(
     page.getByRole("button", { name: "查看 AI 配置", exact: true }),
   ).toBeVisible();
+});
+test("逐日生成显示进度，失败刷新后继续，已完成日期不重复调用", async ({
+  page,
+}) => {
+  let fail = true;
+  let release!: () => void;
+  const pause = new Promise<void>((resolve) => (release = resolve));
+  const offsets: number[] = [];
+  await page.route("**/api/ai", async (r) => {
+    const body = r.request().postDataJSON();
+    expect(body.input.days).toBe(1);
+    expect(body.input.totalDays).toBe(5);
+    offsets.push(body.input.dayOffset);
+    if (body.input.dayOffset === 1 && fail) {
+      await pause;
+      await r.fulfill({
+        status: 422,
+        json: { code: "MODEL_OUTPUT_LIMIT", error: "模拟第二天模型输出截断" },
+      });
+      return;
+    }
+    await r.fulfill({ json: detailedPlan(body.input) });
+  });
+  await page.goto("/#planner");
+  await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
+  await expect(page.getByText(/已完成 1\/5 天/)).toBeVisible();
+  release();
+  await expect(page.getByRole("alert")).toContainText("已保留 1/5 天");
+  expect(offsets).toEqual([0, 1]);
+  expect(
+    await page.evaluate(() => localStorage.getItem("moodnomad-web-v1")),
+  ).toBeNull();
+  fail = false;
+  await page.reload();
+  await page
+    .getByRole("button", { name: "继续未完成天数", exact: true })
+    .click();
+  await expect(page.locator(".preview-day")).toHaveCount(5);
+  expect(offsets).toEqual([0, 1, 1, 2, 3, 4]);
+  await expect(
+    page.getByText("AI 生成 · 请核验", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "保存到当前旅行", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "已保存到行程", exact: true }),
+  ).toBeDisabled();
+  const data = await page.evaluate(() => ({
+    draft: localStorage.getItem("moodnomad-ai-plan-draft-v1"),
+    state: JSON.parse(localStorage.getItem("moodnomad-web-v1")!),
+  }));
+  expect(data.draft).toBeNull();
+  expect(data.state.trips[0].days).toHaveLength(5);
+  expect(data.state.trips[0].expenses.some((e: any) => e.estimateId)).toBe(
+    false,
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });

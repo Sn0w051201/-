@@ -1,3 +1,4 @@
+import { clearPlanDraft } from "./services/plan-job";
 import Discover from "./pages/Discover";
 import { catalog } from "./data/destinations";
 import {
@@ -247,6 +248,7 @@ export default function App() {
         })
       )
         return;
+      clearPlanDraft();
       setShowCreate(false);
       setView("trips");
       notify("新的旅行已创建，去填满它吧");
@@ -292,6 +294,7 @@ export default function App() {
         },
         resetDemo: () => {
           if (cloud) return;
+          clearPlanDraft();
           persist(seedState());
           notify("已恢复初始示例旅行");
           setView("dashboard");

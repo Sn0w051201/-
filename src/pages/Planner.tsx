@@ -1,3 +1,9 @@
+import {
+  clearPlanDraft,
+  loadPlanDraft,
+  planContextText,
+} from "../services/plan-job";
+import type { PlanContext, PlanProgress } from "../services/plan-job";
 import { AIRequestError } from "../services/ai-errors";
 import type { AIErrorKind } from "../services/ai-errors";
 import { getAISettings, proxyURL } from "../services/ai-settings";
@@ -8,7 +14,7 @@ import Recommendation, {
   slotLabels,
 } from "../components/Recommendation";
 import { referenceChoices } from "../data/guides";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -40,6 +46,19 @@ export default function Planner() {
     canEdit,
     cloud,
   } = useMood();
+  const [availableDraft, setAvailableDraft] = useState(loadPlanDraft);
+  const [progress, setProgress] = useState<PlanProgress | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const control = useRef<AbortController | null>(null);
+  const running = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      control.current?.abort();
+    };
+  }, []);
   const [offline, setOffline] = useState(false);
   const [adjust, setAdjust] = useState("");
   const [newTrip, setNewTrip] = useState(!!planningDestination || !trip.id);
@@ -66,7 +85,24 @@ export default function Planner() {
   const [preferences, setPreferences] = useState<
     NonNullable<PlanInput["referencePreferences"]>
   >(trip.referencePreferences || ["dianping", "must-eat", "local"]);
-  const run = async (data: PlanInput, useOffline = false) => {
+  const run = async (
+    data: PlanInput,
+    useOffline = false,
+    restore?: PlanContext,
+    resume = false,
+  ) => {
+    if (running.current) return;
+    running.current = true;
+    const activeTarget = restore?.target ?? target;
+    const activeNewTrip = restore?.newTrip ?? newTrip;
+    if (restore) {
+      setTarget(activeTarget);
+      setNewTrip(activeNewTrip);
+    }
+    control.current = new AbortController();
+    setStopping(false);
+    setProgress(null);
+    setResult(null);
     setBusy(true);
     setError("");
     setFailureKind(null);
@@ -74,27 +110,56 @@ export default function Planner() {
     try {
       setOffline(useOffline);
       setDraft(data);
-      const request = {
-        ...data,
-        days: target === "all" ? data.days : 1,
-        budgetMinor:
-          target === "all"
-            ? data.budgetMinor
-            : Math.floor(data.budgetMinor / Math.max(1, data.days)),
-        budgetMinMinor:
-          target === "all"
-            ? data.budgetMinMinor
-            : Math.floor((data.budgetMinMinor || 0) / Math.max(1, data.days)),
-        dayOffset: target === "all" ? 0 : Number(target),
+      const request: PlanInput = resume
+        ? data
+        : {
+            ...data,
+            days: activeTarget === "all" ? data.days : 1,
+            totalDays: data.totalDays ?? data.days,
+            budgetMinor:
+              activeTarget === "all"
+                ? data.budgetMinor
+                : Math.floor(data.budgetMinor / Math.max(1, data.days)),
+            budgetMinMinor:
+              activeTarget === "all"
+                ? data.budgetMinMinor
+                : Math.floor(
+                    (data.budgetMinMinor || 0) / Math.max(1, data.days),
+                  ),
+            dayOffset: activeTarget === "all" ? 0 : Number(activeTarget),
+          };
+      const context: PlanContext = restore || {
+        userId: state.userId,
+        tripId: trip.id,
+        target: activeTarget,
+        newTrip: activeNewTrip,
       };
-      const plan = useOffline ? mockPlan(request) : await generatePlan(request);
+      const plan = useOffline
+        ? mockPlan(request)
+        : await generatePlan(request, {
+            context,
+            resume,
+            signal: control.current.signal,
+            onProgress: (p) => {
+              if (mounted.current) setProgress(p);
+            },
+          });
+      if (!mounted.current) return;
+      setAvailableDraft(loadPlanDraft());
       setResult(plan);
       setInput(data);
     } catch (e) {
+      if (!mounted.current) return;
+      setAvailableDraft(loadPlanDraft());
       setFailureKind(e instanceof AIRequestError ? e.kind : null);
       setError((e as Error).message);
     } finally {
-      setBusy(false);
+      running.current = false;
+      control.current = null;
+      if (mounted.current) {
+        setBusy(false);
+        setStopping(false);
+      }
     }
   };
   return (
@@ -104,6 +169,49 @@ export default function Planner() {
         title="把向往，变成一份好攻略"
         description="说说你的旅行偏好，让灵感替你多走一步。"
       />
+      {availableDraft &&
+        availableDraft.parts.length > 0 &&
+        availableDraft.context?.userId === state.userId &&
+        availableDraft.context?.tripId === trip.id &&
+        !busy &&
+        !result && (
+          <section className="panel p-5 mb-5">
+            <h3>
+              {availableDraft.input.destination} · 已保留{" "}
+              {availableDraft.parts.length}/{availableDraft.input.days} 天攻略
+            </h3>
+            <p className="my-3">
+              {availableDraft.parts.length === availableDraft.input.days
+                ? "完整攻略已生成，可直接恢复查看，不再请求模型。"
+                : "可以继续未完成的天数，已完成部分不会重复调用模型。"}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() =>
+                  void run(
+                    availableDraft.input,
+                    false,
+                    availableDraft.context,
+                    true,
+                  )
+                }
+              >
+                {availableDraft.parts.length === availableDraft.input.days
+                  ? "恢复已生成攻略"
+                  : "继续未完成天数"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  clearPlanDraft();
+                  setAvailableDraft(null);
+                }}
+              >
+                丢弃生成草稿
+              </Button>
+            </div>
+          </section>
+        )}
       <div className="planner-layout">
         <section className="panel planner-form">
           <div className="panel-heading">
@@ -341,7 +449,16 @@ export default function Planner() {
                 <p>{error}</p>
                 <button
                   type="button"
-                  onClick={() => draft && void run(draft, offline)}
+                  onClick={() => {
+                    const saved = loadPlanDraft();
+                    if (
+                      !offline &&
+                      saved?.context?.userId === state.userId &&
+                      saved.context.tripId === trip.id
+                    )
+                      void run(saved.input, false, saved.context, true);
+                    else if (draft) void run(draft, offline);
+                  }}
                 >
                   重新尝试
                 </button>
@@ -381,7 +498,7 @@ export default function Planner() {
             <p className="planner-disclaimer">
               <Info size={13} />
               {
-                "真实 AI 经后端代理调用；离线参考不调用模型。榜单与实时信息需核验。"
+                "AI 按天生成，会计入模型用量；更改参数或模型会开始新草稿。离线参考不调用模型。"
               }
             </p>
           </form>
@@ -393,15 +510,38 @@ export default function Planner() {
                 <Sparkles size={36} />
               </div>
               <h2>正在把你的向往，拼成一段旅途…</h2>
-              <p>整理旅行节奏，留出适当的休息与探索。</p>
+              <p aria-live="polite">
+                {offline
+                  ? "正在整理离线参考路线。"
+                  : progress
+                    ? `已完成 ${progress.completed}/${progress.total} 天 · ${stopping ? "正在保留当前一天的结果…" : `正在生成第 ${progress.currentDay} 天`}`
+                    : "正在准备逐日生成…"}
+              </p>
               <div className="generation-progress">
                 <span />
               </div>
               <small>
-                {cloud
-                  ? "正在等待服务端模型响应"
-                  : "正在生成演示攻略，未调用真实模型"}
+                {offline
+                  ? "离线参考不调用真实模型。"
+                  : "每天单独生成并保留草稿，完成后合并。模型请求可能产生费用。"}
               </small>
+              {!offline && (
+                <Button
+                  variant="secondary"
+                  disabled={stopping}
+                  onClick={() => {
+                    control.current?.abort();
+                    setStopping(true);
+                  }}
+                >
+                  {stopping ? "等待当前一天结束…" : "完成当前一天后停止"}
+                </Button>
+              )}
+              {progress && !progress.persisted && (
+                <p className="form-note">
+                  浏览器存储不可用，已完成部分暂存于当前页面；请勿刷新或关闭。
+                </p>
+              )}
             </div>
           ) : result ? (
             <div className="plan-preview panel">
@@ -477,7 +617,7 @@ export default function Planner() {
                       void run({
                         ...input,
                         adjustment: adjust,
-                        previousPlan: JSON.stringify(result),
+                        previousPlan: planContextText(result),
                       });
                   }}
                 >
@@ -514,6 +654,8 @@ export default function Planner() {
                         ),
                       )
                     ) {
+                      clearPlanDraft();
+                      setAvailableDraft(null);
                       setApplied(true);
                       notify("攻略已保存，可以继续编辑每一项安排");
                     }

@@ -1,5 +1,5 @@
 import { afterEach, it, expect, vi } from "vitest";
-import { generatePlan } from "./planner";
+import { requestPlan as generatePlan } from "./planner";
 import { mockPlan } from "./planner";
 import { getAISettings, proxyURL } from "./ai-settings";
 vi.mock("./ai-settings", () => ({

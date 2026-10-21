@@ -1,3 +1,4 @@
+import { clearPlanDraft } from "../services/plan-job";
 import AISettings from "../components/AISettings";
 import { useRef, useState } from "react";
 import {
@@ -165,6 +166,7 @@ export default function SettingsPage() {
                   if (!confirm("导入会替换当前本地数据。请确认已导出备份。"))
                     return;
                   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                  clearPlanDraft();
                   location.hash = "dashboard";
                   location.reload();
                 } catch (err) {

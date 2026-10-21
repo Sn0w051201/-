@@ -50,6 +50,7 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
         version: 2,
         modelDiagnostics: true,
         structuredPlans: true,
+        dailyPlanning: true,
       }),
     );
     return true;

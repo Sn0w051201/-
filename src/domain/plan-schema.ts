@@ -5,6 +5,7 @@ import {
 import { z } from "zod";
 export const planInputSchema = z
   .object({
+    totalDays: z.number().int().min(1).max(14).optional(),
     adjustment: z.string().max(500).optional(),
     previousPlan: z.string().max(120000).optional(),
     destination: z.string().trim().min(1).max(40),
@@ -32,7 +33,12 @@ export const planInputSchema = z
   .strict()
   .refine((v) => (v.budgetMinMinor ?? 0) <= v.budgetMinor, {
     message: "预算下限不能超过上限",
-  });
+  })
+  .refine(
+    (v) =>
+      v.totalDays === undefined || (v.dayOffset || 0) + v.days <= v.totalDays,
+    { message: "请求日期超出旅行总天数" },
+  );
 export const planSchema = z
   .object({
     title: z.string().min(1).max(100),

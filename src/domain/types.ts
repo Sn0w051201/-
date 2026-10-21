@@ -149,6 +149,7 @@ export interface AppState {
   userId: string;
 }
 export interface PlanInput {
+  totalDays?: number;
   adjustment?: string;
   previousPlan?: string;
   destination: string;

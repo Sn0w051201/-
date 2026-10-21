@@ -1,3 +1,5 @@
+import { generateDailyPlan } from "./plan-job";
+import type { PlanJobOptions } from "./plan-job";
 import { AIRequestError } from "./ai-errors";
 import { detailedPlan } from "../data/guides";
 import { getAISettings, proxyURL } from "./ai-settings";
@@ -9,7 +11,7 @@ export function mockPlan(input: PlanInput): GeneratedPlan {
   planInputSchema.parse(input);
   return detailedPlan(input);
 }
-export async function generatePlan(input: PlanInput): Promise<GeneratedPlan> {
+export async function requestPlan(input: PlanInput): Promise<GeneratedPlan> {
   if (import.meta.env.VITE_DATA_MODE === "cloud") {
     return planSchema.parse(await cloudCall("generatePlan", { input }));
   }
@@ -91,4 +93,29 @@ export async function generatePlan(input: PlanInput): Promise<GeneratedPlan> {
       "output",
     );
   return parsed.data;
+}
+
+export async function generatePlan(
+  input: PlanInput,
+  options: PlanJobOptions = {},
+): Promise<GeneratedPlan> {
+  const settings = getAISettings();
+  const cloud = import.meta.env.VITE_DATA_MODE === "cloud";
+  let endpoint = "";
+  if (!cloud) {
+    try {
+      endpoint = proxyURL(settings.proxyUrl);
+    } catch (e) {
+      throw new AIRequestError((e as Error).message, "configuration");
+    }
+  }
+  return generateDailyPlan(input, requestPlan, {
+    ...options,
+    identity: JSON.stringify({
+      provider: settings.provider,
+      model: settings.model,
+      proxyUrl: endpoint,
+      cloud,
+    }),
+  });
 }

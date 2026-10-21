@@ -276,3 +276,24 @@ it("结构化模型明确拒绝时不把空内容当格式错误重复调用", a
   ).rejects.toMatchObject({ code: "MODEL_REFUSAL" });
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+it("单日被截断时指导恢复当前日期，不再要求缩短整段旅行", async () => {
+  const fetcher = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ finish_reason: "length", message: { content: "{" } }],
+        }),
+      ),
+  ) as unknown as typeof fetch;
+  await expect(
+    generateWithProvider(
+      { ...input, days: 1, totalDays: 5, dayOffset: 2 },
+      "test-key",
+      { fetcher },
+    ),
+  ).rejects.toMatchObject({
+    code: "MODEL_OUTPUT_LIMIT",
+    message: expect.stringContaining("当前日期"),
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
