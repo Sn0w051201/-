@@ -47,7 +47,16 @@ export function dailyRows(day: GeneratedPlan["days"][number]) {
   return day.items.map((a) => [
     `${a.time} · ${a.slot ? slotLabels[a.slot] : "活动"}`,
     `${a.execution?.priority || "待确认"} · ${a.name}\n${a.address}`,
-    a.details?.reason || a.note || "待补充",
+    [
+      a.details?.reason || a.note || "待补充",
+      ...(a.details?.localAdvice
+        ? [
+            `必点/必体验：${a.details.localAdvice.mustTry.join("；")}`,
+            `怎么吃/怎么玩：${a.details.localAdvice.playTips.join("；")}`,
+            `避雷：${a.details.localAdvice.avoidTips.join("；")}`,
+          ]
+        : []),
+    ].join("\n"),
     a.details?.transport || "【需出发前核实】",
     `${a.duration}分钟`,
     a.details?.reservation || "【需出发前核实】",

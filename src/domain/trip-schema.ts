@@ -1,3 +1,4 @@
+import { placeCandidateSchema } from "./local-advice";
 import {
   travelProfileSchema,
   executionSchema,
@@ -23,6 +24,7 @@ const date = z
   }, "日期无效");
 const activity = z
   .object({
+    place: placeCandidateSchema.optional(),
     execution: executionSchema.optional(),
     id,
     name: z.string().trim().min(1).max(100),
@@ -112,6 +114,7 @@ const photo = z
   .strict();
 export const tripSchema = z
   .object({
+    placeCandidates: z.array(placeCandidateSchema).max(12).optional(),
     handbook: handbookBundleSchema.optional(),
     travelProfile: travelProfileSchema.optional(),
     guideSummary: z.string().max(500).optional(),

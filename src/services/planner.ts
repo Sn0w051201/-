@@ -1,3 +1,4 @@
+import { enrichLocalAdvice } from "./local-advice-reference";
 import { enrichReference } from "./handbook-reference";
 import { validateHandbook } from "../domain/handbook-schema";
 import type { Handbook } from "../domain/handbook-schema";
@@ -12,7 +13,7 @@ export { planInputSchema, planSchema } from "../domain/plan-schema";
 import type { GeneratedPlan, PlanInput } from "../domain/types";
 export function mockPlan(input: PlanInput): GeneratedPlan {
   planInputSchema.parse(input);
-  return enrichReference(input, detailedPlan(input));
+  return enrichLocalAdvice(input, enrichReference(input, detailedPlan(input)));
 }
 async function requestAI(
   input: PlanInput,

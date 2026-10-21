@@ -1,3 +1,9 @@
+import { useState } from "react";
+import {
+  completePlaceAddress,
+  placeCopyText,
+  placeNavigationURL,
+} from "../domain/local-advice";
 import {
   ArrowUpRight,
   Copy,
@@ -65,9 +71,14 @@ export default function Recommendation({
   item,
   expanded = false,
 }: {
-  item: Pick<Activity, "name" | "slot" | "details" | "execution">;
+  item: Pick<
+    Activity,
+    "name" | "address" | "place" | "slot" | "details" | "execution"
+  >;
   expanded?: boolean;
 }) {
+  const [copyNotice, setCopyNotice] = useState("");
+  const [fallbackText, setFallbackText] = useState("");
   const d = item.details;
   if (!d) return null;
   const copy = async (text: string, button: HTMLButtonElement) => {
@@ -83,6 +94,24 @@ export default function Recommendation({
       box?.select();
     }
   };
+  const copyAddress = async () => {
+    const text = placeCopyText(
+      item.place?.name || item.name,
+      item.place?.fullAddress || "",
+    );
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyNotice(
+        item.place && completePlaceAddress(item.place.fullAddress)
+          ? "地址已复制（含店名）"
+          : "店名已复制，请搜索并核实地址",
+      );
+      setFallbackText("");
+    } catch {
+      setCopyNotice("复制未成功，请选择下面文字手动复制。");
+      setFallbackText(text);
+    }
+  };
   return (
     <div className="recommendation">
       <p className="recommendation-reason">
@@ -94,11 +123,103 @@ export default function Recommendation({
           <li key={i}>{h}</li>
         ))}
       </ul>
+      {d.localAdvice && (
+        <section className="local-advice">
+          <div className="local-advice-tags">
+            <span>选店 / 体验方向</span>
+            {d.localAdvice.styles.map((t) => (
+              <em key={t}>{t}</em>
+            ))}
+          </div>
+          <p>
+            <strong>必点 / 必体验：</strong>
+            {d.localAdvice.mustTry.join("；")}
+          </p>
+          <p>
+            <strong>怎么吃 / 怎么玩：</strong>
+            {d.localAdvice.playTips.join("；")}
+          </p>
+          <div className="local-advice-address">
+            <strong>{item.place?.name || "门店 / 场所选择"}</strong>
+            <p>
+              {item.place && completePlaceAddress(item.place.fullAddress)
+                ? item.place.fullAddress
+                : "暂无已核实的完整店址，可复制地点名称搜索【需核实】"}
+            </p>
+            {item.place && (
+              <small>
+                用户提供 · {item.place.source} · 查阅 {item.place.observedAt} ·
+                未联网核实
+                <br />
+                {item.place.sourceNote}
+              </small>
+            )}
+            <div className="local-advice-actions">
+              <button type="button" onClick={() => void copyAddress()}>
+                <Copy size={13} />
+                {item.place && completePlaceAddress(item.place.fullAddress)
+                  ? "复制地址"
+                  : "复制地点搜索"}
+              </button>
+              <a
+                href={placeNavigationURL(
+                  item.place?.name || item.name,
+                  item.place?.fullAddress || item.address,
+                )}
+                target="_blank"
+                rel="noreferrer"
+              >
+                地图搜索 / 导航 ↗
+              </a>
+              {item.place?.sourceUrl && (
+                <a href={item.place.sourceUrl} target="_blank" rel="noreferrer">
+                  {item.place.source === "大众点评"
+                    ? "去点评核实 ↗"
+                    : "核实资料来源 ↗"}
+                </a>
+              )}
+            </div>
+            {copyNotice && <p role="status">{copyNotice}</p>}
+            {fallbackText && (
+              <textarea
+                aria-label="手动复制店名地址"
+                readOnly
+                value={fallbackText}
+                onFocus={(e) => e.target.select()}
+              />
+            )}
+          </div>
+        </section>
+      )}
       <details className="recommendation-more" open={expanded || undefined}>
         <summary>
           交通、预约、备选与口碑核验 <ArrowUpRight size={13} />
         </summary>
         <dl>
+          {d.localAdvice && (
+            <>
+              <div>
+                <dt>营业与时段</dt>
+                <dd>{d.localAdvice.hoursTip}</dd>
+              </div>
+              <div>
+                <dt>排队与取舍</dt>
+                <dd>{d.localAdvice.queueTip}</dd>
+              </div>
+              <div>
+                <dt>预约方式</dt>
+                <dd>{d.localAdvice.reservationTip}</dd>
+              </div>
+              <div>
+                <dt>适合谁</dt>
+                <dd>{d.localAdvice.suitableFor}</dd>
+              </div>
+              <div>
+                <dt>避雷提醒</dt>
+                <dd>{d.localAdvice.avoidTips.join("；")}</dd>
+              </div>
+            </>
+          )}
           {item.execution && (
             <>
               <div>

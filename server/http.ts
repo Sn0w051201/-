@@ -53,6 +53,7 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
         structuredPlans: true,
         dailyPlanning: true,
         completeHandbook: true,
+        localAdvice: true,
       }),
     );
     return true;

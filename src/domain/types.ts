@@ -1,3 +1,4 @@
+import type { PlaceCandidate, LocalAdvice } from "./local-advice";
 import type { z } from "zod";
 import type {
   TravelProfile,
@@ -34,6 +35,7 @@ export interface RecommendationSource {
   query: string;
 }
 export interface RecommendationDetails {
+  localAdvice?: LocalAdvice;
   reason: string;
   highlights: string[];
   transport: string;
@@ -42,6 +44,7 @@ export interface RecommendationDetails {
   sources: RecommendationSource[];
 }
 export interface Activity {
+  place?: PlaceCandidate;
   execution?: z.infer<typeof executionSchema>;
   id: string;
   name: string;
@@ -99,6 +102,7 @@ export interface TravelPhoto {
   createdBy: string;
 }
 export interface Trip {
+  placeCandidates?: PlaceCandidate[];
   handbook?: Handbook;
   travelProfile?: TravelProfile;
   guideSummary?: string;
@@ -162,6 +166,7 @@ export interface AppState {
   userId: string;
 }
 export interface PlanInput {
+  placeCandidates?: PlaceCandidate[];
   detailedGuide?: boolean;
   travelProfile?: TravelProfile;
   totalDays?: number;

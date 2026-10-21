@@ -1,7 +1,9 @@
+import { localPreferencesSchema } from "./local-advice";
 import { z } from "zod";
 const text = z.string().trim().min(1).max(300);
 export const travelProfileSchema = z
   .object({
+    localRecommendations: localPreferencesSchema.optional(),
     departure: z.string().max(60),
     nights: z.number().int().min(0).max(30),
     season: z.string().max(100),

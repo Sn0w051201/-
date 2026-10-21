@@ -82,6 +82,7 @@ export function applyPlan(
     ...trip,
     ...(dayIndex === undefined
       ? {
+          placeCandidates: input.placeCandidates,
           handbook: plan.handbook,
           travelProfile: input.travelProfile,
           guideSummary: plan.summary,

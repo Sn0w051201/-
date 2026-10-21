@@ -2,6 +2,11 @@ import type { GeneratedPlan, PlanInput } from "./types";
 export function assertGuideQuality(plan: GeneratedPlan, input: PlanInput) {
   if (plan.days.length !== input.days) throw new Error("模型返回天数不一致");
   for (const day of plan.days) {
+    if (
+      input.travelProfile?.localRecommendations &&
+      day.items.some((a) => !a.details?.localAdvice)
+    )
+      throw new Error("缺少饮食玩乐的必点必玩、排队预约或避雷建议");
     if (input.detailedGuide) {
       if (!day.practical || day.items.some((a) => !a.execution))
         throw new Error("缺少精细行程的优先级、体力、营业核验或每日机动预案");

@@ -5640,3 +5640,14 @@ h1 {
 .daily-contingency dl div {display:grid;grid-template-columns:85px minmax(0,1fr);gap:10px;}
 .daily-contingency dt {font-weight:600;} .daily-contingency dd {margin:0;}
 .travel-handbook h3 {margin:16px 0 10px;}
+
+.local-advice {margin:14px 0;padding:14px;background:rgba(146,116,163,.07);border-radius:12px;}
+.local-advice p {font-size:13px;line-height:1.8;margin:8px 0;overflow-wrap:anywhere;}
+.local-advice-tags,.local-advice-actions {display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;}
+.local-advice-tags em {font-style:normal;color:var(--purple);padding:3px 8px;border:1px solid var(--line);border-radius:20px;}
+.local-advice-address {border-top:1px solid var(--line);padding-top:12px;margin-top:12px;}
+.local-advice-address small {font-size:11px;line-height:1.8;}
+.local-advice-actions {margin-top:10px;}
+.local-advice-actions button {display:flex;align-items:center;gap:5px;color:var(--purple);cursor:pointer;}
+.local-advice textarea {width:100%;margin-top:8px;}
+.provided-place {border:1px solid var(--line);border-radius:12px;padding:12px;margin:12px 0;}

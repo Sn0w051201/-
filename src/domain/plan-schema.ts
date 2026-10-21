@@ -1,3 +1,4 @@
+import { placeCandidateSchema } from "./local-advice";
 import {
   travelProfileSchema,
   executionSchema,
@@ -13,6 +14,14 @@ export const planInputSchema = z
   .object({
     detailedGuide: z.boolean().optional(),
     travelProfile: travelProfileSchema.optional(),
+    placeCandidates: z
+      .array(placeCandidateSchema)
+      .max(12)
+      .refine(
+        (v) => new Set(v.map((p) => p.id)).size === v.length,
+        "候选店铺ID不能重复",
+      )
+      .optional(),
     totalDays: z.number().int().min(1).max(14).optional(),
     adjustment: z.string().max(500).optional(),
     previousPlan: z.string().max(120000).optional(),
@@ -63,6 +72,7 @@ export const planSchema = z
               .array(
                 z
                   .object({
+                    place: placeCandidateSchema.optional(),
                     execution: executionSchema.optional(),
                     name: z.string().min(1).max(100),
                     time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),

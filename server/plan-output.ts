@@ -10,12 +10,16 @@ const day = planSchema.shape.days.element;
 const activity = day.shape.items.element;
 // The provider requires every property, using null when a coordinate is unknown.
 // Internal and persisted records continue using absent optional coordinates.
-const wireActivity = activity.extend({
+const wireActivity = activity.omit({ place: true }).extend({
   execution: activity.shape.execution.unwrap().nullable(),
   lat: activity.shape.lat.unwrap().nullable(),
   lng: activity.shape.lng.unwrap().nullable(),
   slot: guideSlotSchema,
-  details: recommendationDetailsSchema,
+  details: recommendationDetailsSchema.extend({
+    localAdvice: recommendationDetailsSchema.shape.localAdvice
+      .unwrap()
+      .nullable(),
+  }),
 });
 const wirePlan = planSchema.omit({ handbook: true }).extend({
   days: z
@@ -132,6 +136,7 @@ const fields = [
   "details",
 ] as const;
 const detailFields = [
+  "localAdvice",
   "reason",
   "highlights",
   "transport",
@@ -164,6 +169,7 @@ export function normalizePlanOutput(value: unknown): unknown {
             item.time = "0" + item.time.trim();
           if (record(item.details)) {
             const details = pick(item.details, detailFields);
+            if (details.localAdvice === null) delete details.localAdvice;
             if (Array.isArray(details.sources))
               details.sources = details.sources.map((source) =>
                 record(source) ? pick(source, ["platform", "query"]) : source,
@@ -194,6 +200,15 @@ const names: Record<string, string> = {
   lng: "经度",
   slot: "时段",
   details: "推荐详情",
+  localAdvice: "吃喝玩乐细节",
+  candidateId: "店铺候选ID",
+  mustTry: "必点必玩",
+  playTips: "玩法建议",
+  avoidTips: "避雷提示",
+  hoursTip: "营业核验",
+  queueTip: "排队提示",
+  reservationTip: "预约提示",
+  suitableFor: "适合人群",
   reason: "推荐理由",
   highlights: "体验亮点",
   transport: "交通衔接",

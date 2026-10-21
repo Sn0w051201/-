@@ -1,3 +1,4 @@
+import { enrichLocalAdvice } from "../../src/services/local-advice-reference";
 import { test, expect } from "@playwright/test";
 import {
   enrichReference,
@@ -84,7 +85,10 @@ test("真实 AI 接口请求、追问、失败状态；备份不含密钥", asyn
         },
       });
     } else {
-      const result = enrichReference(body.input, detailedPlan(body.input));
+      const result = enrichLocalAdvice(
+        body.input,
+        enrichReference(body.input, detailedPlan(body.input)),
+      );
       delete result.handbook;
       await r.fulfill({ json: result });
     }
@@ -311,7 +315,10 @@ test("逐日生成显示进度，失败刷新后继续，已完成日期不重�
       });
       return;
     }
-    const result = enrichReference(body.input, detailedPlan(body.input));
+    const result = enrichLocalAdvice(
+      body.input,
+      enrichReference(body.input, detailedPlan(body.input)),
+    );
     delete result.handbook;
     await r.fulfill({ json: result });
   });
@@ -388,7 +395,10 @@ test("精细攻略传入旅行条件，手册失败后刷新续写、下载和�
       return;
     }
     dayCalls++;
-    const plan = enrichReference(body.input, detailedPlan(body.input));
+    const plan = enrichLocalAdvice(
+      body.input,
+      enrichReference(body.input, detailedPlan(body.input)),
+    );
     delete plan.handbook;
     await r.fulfill({ json: plan });
   });

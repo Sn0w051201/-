@@ -1,3 +1,9 @@
+import {
+  localStyles,
+  localPreferencesSchema,
+  placeCandidateSchema,
+} from "../domain/local-advice";
+import type { PlaceCandidate, LocalPreferences } from "../domain/local-advice";
 import TravelHandbook from "../components/TravelHandbook";
 import { travelProfileSchema } from "../domain/handbook-schema";
 import {
@@ -64,6 +70,20 @@ export default function Planner() {
       control.current?.abort();
     };
   }, []);
+  const [placeCandidates, setPlaceCandidates] = useState<PlaceCandidate[]>(
+    trip.placeCandidates || [],
+  );
+  const [localPreferences, setLocalPreferences] = useState<LocalPreferences>(
+    trip.travelProfile?.localRecommendations || {
+      styles: ["当地特色", "宝藏小店"],
+      foodTypes: [],
+      playTypes: [],
+      area: "",
+      maxPerPersonMinor: null,
+      queueToleranceMinutes: 30,
+      reservation: "any",
+    },
+  );
   const [detailedGuide, setDetailedGuide] = useState(true);
   const [offline, setOffline] = useState(false);
   const [adjust, setAdjust] = useState("");
@@ -263,7 +283,18 @@ export default function Planner() {
                   travelProfile: travelProfileSchema.parse({
                     ...personal,
                     nights: Number(f.get("nights")),
+                    localRecommendations: localPreferencesSchema.parse({
+                      ...localPreferences,
+                      maxPerPersonMinor: String(
+                        f.get("localMaxPrice") || "",
+                      ).trim()
+                        ? parseMoney(String(f.get("localMaxPrice")))
+                        : null,
+                    }),
                   }),
+                  placeCandidates: placeCandidates.map((p) =>
+                    placeCandidateSchema.parse(p),
+                  ),
                   destination: String(f.get("destination")).trim(),
                   days: Number(f.get("days")),
                   travelers: Number(f.get("travelers")),
@@ -285,7 +316,11 @@ export default function Planner() {
                 );
               } catch (err) {
                 setFailureKind(null);
-                setError((err as Error).message);
+                setError(
+                  err instanceof Error && err.name === "ZodError"
+                    ? "请核对参考店铺的名称、来源、点评链接和日期；点评链接应来自dianping.com或dpurl.cn。"
+                    : (err as Error).message,
+                );
               }
             }}
           >
@@ -508,6 +543,300 @@ export default function Planner() {
                 ))}
               </div>
             </Field>
+            <details className="travel-profile-fields" open>
+              <summary>攻略里的吃喝玩乐 · 细化建议</summary>
+              <Field label="更喜欢哪类推荐">
+                <div className="interest-options">
+                  {localStyles.map((style) => (
+                    <button
+                      type="button"
+                      key={style}
+                      className={
+                        localPreferences.styles.includes(style)
+                          ? "selected"
+                          : ""
+                      }
+                      onClick={() =>
+                        setLocalPreferences((p) => ({
+                          ...p,
+                          styles: p.styles.includes(style)
+                            ? p.styles.filter((t) => t !== style)
+                            : [...p.styles, style],
+                        }))
+                      }
+                    >
+                      {localPreferences.styles.includes(style) && (
+                        <Check size={12} />
+                      )}{" "}
+                      {style}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="想吃什么">
+                <div className="interest-options">
+                  {[
+                    "本地菜",
+                    "老字号",
+                    "市场小吃",
+                    "早餐",
+                    "夜宵",
+                    "甜品咖啡",
+                  ].map((tag) => (
+                    <button
+                      type="button"
+                      key={tag}
+                      className={
+                        localPreferences.foodTypes.includes(tag)
+                          ? "selected"
+                          : ""
+                      }
+                      onClick={() =>
+                        setLocalPreferences((p) => ({
+                          ...p,
+                          foodTypes: p.foodTypes.includes(tag)
+                            ? p.foodTypes.filter((t) => t !== tag)
+                            : [...p.foodTypes, tag],
+                        }))
+                      }
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="想怎么玩">
+                <div className="interest-options">
+                  {[
+                    "演出展览",
+                    "夜游",
+                    "市集",
+                    "手作",
+                    "亲子娱乐",
+                    "户外活动",
+                    "休闲放松",
+                  ].map((tag) => (
+                    <button
+                      type="button"
+                      key={tag}
+                      className={
+                        localPreferences.playTypes.includes(tag)
+                          ? "selected"
+                          : ""
+                      }
+                      onClick={() =>
+                        setLocalPreferences((p) => ({
+                          ...p,
+                          playTypes: p.playTypes.includes(tag)
+                            ? p.playTypes.filter((t) => t !== tag)
+                            : [...p.playTypes, tag],
+                        }))
+                      }
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="活动片区 / 酒店周边">
+                <input
+                  maxLength={150}
+                  value={localPreferences.area}
+                  onChange={(e) =>
+                    setLocalPreferences((p) => ({ ...p, area: e.target.value }))
+                  }
+                  placeholder="例如：武林广场附近，尽量步行可达"
+                />
+              </Field>
+              <div className="form-row">
+                <Field label="每次餐饮 / 体验人均上限（元，选填）">
+                  <input
+                    name="localMaxPrice"
+                    inputMode="decimal"
+                    defaultValue={
+                      localPreferences.maxPerPersonMinor === null
+                        ? ""
+                        : String(localPreferences.maxPerPersonMinor / 100)
+                    }
+                    placeholder="例如：80"
+                  />
+                </Field>
+                <Field label="最多愿意排队（分钟）">
+                  <input
+                    type="number"
+                    min="0"
+                    max="180"
+                    required
+                    value={localPreferences.queueToleranceMinutes}
+                    onChange={(e) =>
+                      setLocalPreferences((p) => ({
+                        ...p,
+                        queueToleranceMinutes: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
+              <Field label="预约偏好">
+                <select
+                  value={localPreferences.reservation}
+                  onChange={(e) =>
+                    setLocalPreferences((p) => ({
+                      ...p,
+                      reservation: e.target
+                        .value as LocalPreferences["reservation"],
+                    }))
+                  }
+                >
+                  <option value="any">均可，说明预约节点</option>
+                  <option value="avoid">尽量无需预约</option>
+                  <option value="okay">愿意提前预约</option>
+                </select>
+              </Field>
+              <small>
+                这些偏好直接用于每日攻略，不表示已查询点评热度、排队或实时营业情况。
+              </small>
+            </details>
+            <details className="travel-profile-fields">
+              <summary>把收藏的点评店铺放进攻略（选填，最多12家）</summary>
+              <p className="form-note">
+                你提供店名、地址及来源，AI判断是否顺路、适合预算和忌口；链接不会自动读取。没提供店铺时会给出具体菜品、玩法和选店片区，不编造门店或门牌。
+              </p>
+              {placeCandidates.map((place, index) => (
+                <div className="provided-place" key={place.id}>
+                  <div className="flex justify-between items-center">
+                    <strong>候选 {index + 1}</strong>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPlaceCandidates((v) =>
+                          v.filter((p) => p.id !== place.id),
+                        )
+                      }
+                    >
+                      移除此候选
+                    </button>
+                  </div>
+                  {(
+                    [
+                      ["name", "店铺 / 场所名称", 100],
+                      [
+                        "fullAddress",
+                        "完整地址（省市区+街道门牌 / 楼层）",
+                        300,
+                      ],
+                      ["sourceUrl", "门店来源链接（HTTPS）", 500],
+                      ["sourceNote", "来源说明 / 查阅内容摘要", 200],
+                    ] as const
+                  ).map(([key, label, maxLength]) => (
+                    <Field key={key} label={`${label} · 候选${index + 1}`}>
+                      <input
+                        value={place[key]}
+                        maxLength={maxLength}
+                        required={
+                          key === "name" ||
+                          key === "sourceNote" ||
+                          (key === "sourceUrl" && place.source === "大众点评")
+                        }
+                        onChange={(e) =>
+                          setPlaceCandidates((v) =>
+                            v.map((p) =>
+                              p.id === place.id
+                                ? { ...p, [key]: e.target.value }
+                                : p,
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+                  ))}
+                  <div className="form-row">
+                    <Field label={`类型 · 候选${index + 1}`}>
+                      <select
+                        value={place.category}
+                        onChange={(e) =>
+                          setPlaceCandidates((v) =>
+                            v.map((p) =>
+                              p.id === place.id
+                                ? {
+                                    ...p,
+                                    category: e.target
+                                      .value as PlaceCandidate["category"],
+                                  }
+                                : p,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="food">餐厅 / 小吃 / 咖啡</option>
+                        <option value="play">玩乐 / 场所</option>
+                      </select>
+                    </Field>
+                    <Field label={`来源 · 候选${index + 1}`}>
+                      <select
+                        value={place.source}
+                        onChange={(e) =>
+                          setPlaceCandidates((v) =>
+                            v.map((p) =>
+                              p.id === place.id
+                                ? {
+                                    ...p,
+                                    source: e.target
+                                      .value as PlaceCandidate["source"],
+                                  }
+                                : p,
+                            ),
+                          )
+                        }
+                      >
+                        {["大众点评", "官方资料", "个人记录"].map((t) => (
+                          <option key={t}>{t}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label={`资料查阅日期 · 候选${index + 1}`}>
+                    <input
+                      type="date"
+                      required
+                      value={place.observedAt}
+                      onChange={(e) =>
+                        setPlaceCandidates((v) =>
+                          v.map((p) =>
+                            p.id === place.id
+                              ? { ...p, observedAt: e.target.value }
+                              : p,
+                          ),
+                        )
+                      }
+                    />
+                  </Field>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={placeCandidates.length >= 12}
+                onClick={() =>
+                  setPlaceCandidates((v) => [
+                    ...v,
+                    {
+                      id: uid(),
+                      category: "food",
+                      name: "",
+                      fullAddress: "",
+                      source: "大众点评",
+                      sourceUrl: "",
+                      sourceNote: "用户提供的门店资料，尚未核实",
+                      observedAt: new Date().toISOString().slice(0, 10),
+                      avgPriceMinor: null,
+                    },
+                  ])
+                }
+              >
+                添加一家参考店铺
+              </Button>
+            </details>
             <Field label="选店与榜单核验偏好">
               <div className="reference-options">
                 {referenceChoices.map((choice) => (

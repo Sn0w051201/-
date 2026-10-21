@@ -60,3 +60,7 @@ AppState 增加可选 `favorites`, `customDestinations`, `destinationEdits`, `hi
 ### 精细攻略可选字段
 
 `trips.travelProfile` 保存出发地、夜数、同行体力、住宿交通饮食及偏好；`guideSummary/guideAssumptions` 保存概要与假设；`handbook.sections` 是固定key和固定列数的九组表格，配合每日路线、独立预算形成十一部分攻略；`handbook.budget` 是七类整程全员预算区间（`minMinor/maxMinor`，人民币整数分）。`days[].practical` 保存机动时间与四类日常替代；`days[].items[].execution` 保存优先级、体力、人群、营业核验与费用区间。新字段均可选，旧备份无需迁移。含同行个人偏好的JSON备份只在可信范围分享。生成中的分组草稿仍在浏览器独立存储，不进入数据库和分享快照。
+
+### 攻略中的吃喝玩乐细节
+
+`travelProfile.localRecommendations`存偏好（方向/菜系/体验类型/片区/人均上限/排队分钟/预约偏好）；`placeCandidates[]`存用户提供的店铺资料及来源。`days[].items[].details.localAdvice`存必点必玩、玩法、避雷、营业排队预约、人群建议；活动的`place`由后端按候选ID附加原始事实。均为可选新增字段，旧数据兼容；不增加独立页面或数据库集合，不改变真实支出。
