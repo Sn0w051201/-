@@ -83,3 +83,24 @@ it("成功结果仍符合结构，代理配置错误保留配置入口", async (
   });
   expect(getAISettings).toHaveBeenCalled();
 });
+it("余额不足和攻略截断不要求重新配置，模型名称错误才显示配置入口", async () => {
+  for (const [code, status, kind] of [
+    ["MODEL_QUOTA", 402, "model"],
+    ["MODEL_OUTPUT_LIMIT", 422, "output"],
+    ["MODEL_NOT_FOUND", 404, "configuration"],
+  ] as const) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "清晰的模型错误说明", code }), {
+            status,
+          }),
+      ),
+    );
+    await expect(generatePlan(input)).rejects.toMatchObject({
+      kind,
+      message: "清晰的模型错误说明",
+    });
+  }
+});

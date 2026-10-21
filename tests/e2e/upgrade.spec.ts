@@ -217,3 +217,40 @@ test("网络失败显示健康检查入口，不要求重新配置密钥", async
     page.getByRole("button", { name: "查看 AI 配置", exact: true }),
   ).toHaveCount(0);
 });
+test("OpenAI 额度不足不提示重填Key，模型不存在时提供配置入口", async ({
+  page,
+}) => {
+  await page.route("**/api/ai", (r) =>
+    r.fulfill({
+      status: 402,
+      json: {
+        code: "MODEL_QUOTA",
+        error: "模型平台余额或可用额度不足。请检查 API 账单。",
+      },
+    }),
+  );
+  await page.goto("/#planner");
+  await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("额度不足");
+  await expect(
+    page.getByRole("button", { name: "查看 AI 配置", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "打开后端健康检查 ↗" }),
+  ).toHaveCount(0);
+  await page.unroute("**/api/ai");
+  await page.route("**/api/ai", (r) =>
+    r.fulfill({
+      status: 404,
+      json: {
+        code: "MODEL_NOT_FOUND",
+        error: "模型不存在或当前账号无权使用。",
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("模型不存在");
+  await expect(
+    page.getByRole("button", { name: "查看 AI 配置", exact: true }),
+  ).toBeVisible();
+});

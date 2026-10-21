@@ -63,13 +63,27 @@ export async function generatePlan(input: PlanInput): Promise<GeneratedPlan> {
       typeof (data as { error?: unknown })?.error === "string"
         ? (data as { error: string }).error.slice(0, 500)
         : `模型服务暂不可用（HTTP ${response.status}）`;
-    throw new AIRequestError(
-      error,
-      response.status === 401 || /密钥|模型配置/.test(error)
+    const code =
+      typeof (data as { code?: unknown })?.code === "string"
+        ? (data as { code: string }).code
+        : "";
+    const kind =
+      [
+        "KEY_MISSING",
+        "KEY_INVALID",
+        "MODEL_NOT_FOUND",
+        "MODEL_PARAMETERS",
+        "MODEL_FORBIDDEN",
+      ].includes(code) || response.status === 401
         ? "configuration"
-        : "service",
-    );
+        : code.startsWith("MODEL_OUTPUT_")
+          ? "output"
+          : code.startsWith("MODEL_")
+            ? "model"
+            : "service";
+    throw new AIRequestError(error, kind);
   }
+
   const parsed = planSchema.safeParse(data);
   if (!parsed.success)
     throw new AIRequestError(

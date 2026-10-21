@@ -1,3 +1,4 @@
+import { ProviderError } from "./provider-error";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { generateWithProvider } from "./llm";
 import deployment from "../config/web-deployment.json";
@@ -43,7 +44,12 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
   }
   if (req.url === "/api/health") {
     res.end(
-      JSON.stringify({ ok: true, service: "moodnomad-proxy", version: 2 }),
+      JSON.stringify({
+        ok: true,
+        service: "moodnomad-proxy",
+        version: 2,
+        modelDiagnostics: true,
+      }),
     );
     return true;
   }
@@ -99,21 +105,23 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
     const plan = await generateWithProvider(
       data.input,
       supplied || process.env.LLM_API_KEY || "",
-      { baseUrl: provider[0], model: data.model || provider[1] },
+      { baseUrl: provider[0], model: data.model?.trim() || provider[1] },
     );
     res.end(JSON.stringify(plan));
   } catch (e) {
-    res.writeHead(400);
+    const known = e instanceof ProviderError;
+    res.writeHead(known ? e.status : 400);
     res.end(
       JSON.stringify({
-        error:
-          e instanceof SyntaxError
+        error: known
+          ? e.message
+          : e instanceof SyntaxError
             ? "请求格式不正确"
-            : (e as Error).message.includes("密钥")
-              ? "尚未配置有效模型密钥"
-              : "生成失败，请检查模型配置或缩短天数后重试；未保存无效行程。",
+            : "代理请求参数不正确，请检查模型服务、模型名称和旅行输入。",
+        code: known ? e.code : "REQUEST_INVALID",
       }),
     );
   }
+
   return true;
 }

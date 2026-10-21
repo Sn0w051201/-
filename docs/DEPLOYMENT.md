@@ -106,3 +106,11 @@ npm run deploy:pages
 HTTP 代理现在从公开模板 `config/web-deployment.json` 读取本项目默认前端来源；已有 Render 服务未填写 `ALLOWED_ORIGIN` 也允许 `https://sn0w051201.github.io`。显式环境变量仍优先；变量值必须是来源，不能包含 `/-/` 路径。可信的 `RENDER_EXTERNAL_URL` 和服务同源也可访问；无关来源仍返回403，不使用通配符，服务器 Key 仍需令牌。
 
 `/api/health` 返回 `{"ok":true,"service":"moodnomad-proxy","version":2}`，可用于确认新版本已部署。网页区分网络、超时、模型授权、代理响应格式和攻略结构错误；网络失败提供健康检查入口，不要求重新配置 Key。客户端等待上限120秒，允许免费实例冷启动，但不自动重发可能收费的生成请求。
+
+### 代理已连接但“生成失败”
+
+新版本不再统一屏蔽为“检查模型配置或缩短天数”：`/api/ai` 返回固定、安全的错误码与说明。`KEY_INVALID`=模型平台401，`MODEL_QUOTA`=余额/额度不足（包含OpenAI的429 insufficient_quota），`MODEL_FORBIDDEN`=权限或地区，`MODEL_NOT_FOUND`=模型名称/权限，`MODEL_RATE_LIMIT`=频率限制，`MODEL_PARAMETERS`=参数不支持，`MODEL_TIMEOUT`=等待模型超时，`MODEL_OUTPUT_LIMIT`=输出被截断，`MODEL_OUTPUT_FORMAT/QUALITY`=结构或内容校验未通过。上游原始报文和密钥不会返回前端。
+
+身份、余额、权限、参数、限流、超时和明确截断不重复调用；平台5xx或可修正的格式/质量错误最多重试一次，后者附加修正要求。DeepSeek输出参数限制8192 token，避免默认5天请求超出其参数范围；OpenAI上限16000。仅在明确截断时建议缩短天数。健康检查新增 `modelDiagnostics:true` 标记，便于确认部署了诊断版本。
+
+OpenAI API 与 ChatGPT Plus/Pro 独立计费；网页选择OpenAI时使用的是 OpenAI 官方 API 域名，第三方中转平台的Key不能当作官方Key使用。没有真实凭据时测试使用模拟上游，不宣称已经验证用户账号或实际计费状态。

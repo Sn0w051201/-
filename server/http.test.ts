@@ -106,7 +106,7 @@ it("上游失败返回可读错误，不泄露模型响应、密钥或无效行�
       input,
     }),
   });
-  expect(res.status).toBe(400);
+  expect(res.status).toBe(502);
   expect(await res.text()).not.toMatch(/private|test-private-key|"days"/);
 });
 it("已有服务未设置跨域变量时，允许项目网页预检及健康检查，拒绝无关来源", async () => {
@@ -166,4 +166,40 @@ it("显式来源覆盖默认来源，并支持 Render 可信环境提供的同�
     headers: { Origin: "https://sn0w051201.github.io" },
   });
   expect(blocked.status).toBe(403);
+});
+it("HTTP 接口传递 OpenAI 的安全错误码，不把401和额度不足合并为生成失败", async () => {
+  const base = await server();
+  for (const [upstreamStatus, upstreamCode, status, code] of [
+    [401, "invalid_api_key", 401, "KEY_INVALID"],
+    [429, "insufficient_quota", 402, "MODEL_QUOTA"],
+    [404, "model_not_found", 404, "MODEL_NOT_FOUND"],
+  ] as const) {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: upstreamCode,
+              message: "test-private-key private upstream debug",
+            },
+          }),
+          { status: upstreamStatus },
+        ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const res = await nativeFetch(base + "/api/ai", {
+      method: "POST",
+      headers: { Origin: "https://sn0w051201.github.io" },
+      body: JSON.stringify({
+        provider: "openai",
+        key: "test-private-key",
+        input,
+      }),
+    });
+    expect(res.status).toBe(status);
+    const data = await res.json();
+    expect(data.code).toBe(code);
+    expect(JSON.stringify(data)).not.toMatch(/test-private-key|upstream debug/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  }
 });

@@ -1,3 +1,4 @@
+import { ProviderError, providerHTTPError } from "./provider-error";
 import { planInputSchema, planSchema } from "../src/domain/plan-schema";
 import type { GeneratedPlan, PlanInput } from "../src/domain/types";
 export const GUIDE_PROMPT = `你是谨慎、细致的旅行规划助手。仅输出有效 JSON。
@@ -44,14 +45,52 @@ export async function generateWithProvider(
   key: string,
   options: { baseUrl?: string; model?: string; fetcher?: typeof fetch } = {},
 ): Promise<GeneratedPlan> {
-  const parsed = planInputSchema.parse(input);
-  if (parsed.previousPlan) planSchema.parse(JSON.parse(parsed.previousPlan));
-  if (!key) throw new Error("服务端尚未配置模型密钥，请联系管理员");
+  const validated = planInputSchema.safeParse(input);
+  if (!validated.success)
+    throw new ProviderError(
+      "REQUEST_INVALID",
+      "旅行参数不正确，请检查目的地、天数、人数和预算。",
+      400,
+    );
+  const parsed = validated.data;
+  if (parsed.previousPlan) {
+    try {
+      planSchema.parse(JSON.parse(parsed.previousPlan));
+    } catch {
+      throw new ProviderError(
+        "REQUEST_INVALID",
+        "原攻略格式不正确，请重新选择要调整的行程。",
+        400,
+      );
+    }
+  }
+  if (!key.trim())
+    throw new ProviderError(
+      "KEY_MISSING",
+      "尚未提供模型密钥，请在设置页填写 Key，或使用已授权的服务端密钥。",
+      401,
+    );
   const base = options.baseUrl || "https://api.openai.com/v1";
-  const url = new URL(base);
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    throw new ProviderError(
+      "MODEL_PARAMETERS",
+      "模型服务地址必须使用 HTTPS。",
+      400,
+    );
+  }
   if (url.protocol !== "https:" || url.username || url.password)
-    throw new Error("模型服务地址必须使用 HTTPS");
+    throw new ProviderError(
+      "MODEL_PARAMETERS",
+      "模型服务地址必须使用 HTTPS。",
+      400,
+    );
   const fetcher = options.fetcher || fetch;
+  // DeepSeek chat accepts at most 8192 output tokens; larger requests used to fail with 400.
+  const tokenCap = url.hostname === "api.deepseek.com" ? 8192 : 16000;
+  let correction = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await fetcher(
@@ -59,35 +98,105 @@ export async function generateWithProvider(
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${key}`,
+            Authorization: `Bearer ${key.trim()}`,
             "Content-Type": "application/json",
           },
-          signal: AbortSignal.timeout(25000),
+          signal: AbortSignal.timeout(45000),
           body: JSON.stringify({
             model: options.model || "gpt-4o-mini",
             temperature: 0.6,
-            max_tokens: Math.min(16000, Math.max(6000, parsed.days * 2200)),
+            max_tokens: Math.min(tokenCap, Math.max(6000, parsed.days * 2200)),
             response_format: { type: "json_object" },
             messages: [
               { role: "system", content: GUIDE_PROMPT },
               { role: "user", content: JSON.stringify(parsed) },
+              ...(correction ? [{ role: "user", content: correction }] : []),
             ],
           }),
         },
       );
-      if (!response.ok) throw new Error("模型请求未成功");
+      if (!response.ok) throw await providerHTTPError(response);
       const data = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
+        choices?: { finish_reason?: string; message?: { content?: string } }[];
       };
-      const text = data.choices?.[0]?.message?.content;
-      if (!text || text.length > 200000) throw new Error("模型输出为空或过大");
-      const plan = planSchema.parse(JSON.parse(text));
-      assertGuideQuality(plan, parsed);
-      return plan;
-    } catch {
-      if (attempt === 1)
-        throw new Error("攻略暂时未能生成，请稍后重试。未保存无效行程。");
+      const choice = data.choices?.[0];
+      if (choice?.finish_reason === "length")
+        throw new ProviderError(
+          "MODEL_OUTPUT_LIMIT",
+          "模型输出达到长度上限，攻略未生成完整。请先生成1—2天，或换用支持更长输出的模型。未保存无效行程。",
+          422,
+        );
+      if (choice?.finish_reason === "content_filter")
+        throw new ProviderError(
+          "MODEL_REFUSAL",
+          "模型平台未返回攻略，请调整旅行描述后重试。",
+          422,
+        );
+      const text = choice?.message?.content;
+      if (typeof text !== "string" || !text.trim() || text.length > 200000)
+        throw new ProviderError(
+          "MODEL_OUTPUT_FORMAT",
+          "攻略暂时未能生成：模型返回内容为空或过大。未保存无效行程。",
+          502,
+          true,
+        );
+      // Accept a complete JSON Markdown block, while still rejecting prose or malformed data.
+      const clean = text
+        .trim()
+        .replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, "$1");
+      let value: unknown;
+      try {
+        value = JSON.parse(clean);
+      } catch {
+        throw new ProviderError(
+          "MODEL_OUTPUT_FORMAT",
+          "攻略暂时未能生成：模型未返回有效 JSON。未保存无效行程。",
+          502,
+          true,
+        );
+      }
+      const valid = planSchema.safeParse(value);
+      if (!valid.success)
+        throw new ProviderError(
+          "MODEL_OUTPUT_FORMAT",
+          "攻略暂时未能生成：模型返回的字段、类型或长度不符合行程结构。未保存无效行程。",
+          502,
+          true,
+        );
+      try {
+        assertGuideQuality(valid.data, parsed);
+      } catch (e) {
+        throw new ProviderError(
+          "MODEL_OUTPUT_QUALITY",
+          `攻略暂时未能生成：${(e as Error).message}。未保存无效行程。`,
+          422,
+          true,
+        );
+      }
+      return valid.data;
+    } catch (e) {
+      const error =
+        e instanceof ProviderError
+          ? e
+          : ["TimeoutError", "AbortError"].includes((e as Error).name)
+            ? new ProviderError(
+                "MODEL_TIMEOUT",
+                "模型平台响应超时，未能取得完整攻略。请稍后重试，或改用响应较快的模型。",
+                504,
+              )
+            : new ProviderError(
+                "MODEL_NETWORK",
+                "后端无法连接模型平台或读取响应。请检查服务地区和模型平台状态。",
+                502,
+              );
+      if (!error.retryable || attempt === 1) throw error;
+      if (error.code.startsWith("MODEL_OUTPUT_"))
+        correction = `请重新生成完整 JSON，修正上次的问题：${error.message} 严格覆盖指定天数、每天7个时段、推荐详情和整数分预算；保持文字简洁，不要添加额外字段。`;
     }
   }
-  throw new Error("生成失败");
+  throw new ProviderError(
+    "MODEL_UNAVAILABLE",
+    "模型服务暂时不可用，请稍后重试。",
+    502,
+  );
 }
