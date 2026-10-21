@@ -49,6 +49,7 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
         service: "moodnomad-proxy",
         version: 2,
         modelDiagnostics: true,
+        structuredPlans: true,
       }),
     );
     return true;

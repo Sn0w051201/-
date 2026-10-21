@@ -27,7 +27,8 @@
     "react-dom": "^19.0.0",
     "recharts": "^3.10.1",
     "tailwindcss": "^4.3.3",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@cloudbase/node-sdk": "^3.10.0",

@@ -206,3 +206,73 @@ it("完整 Markdown JSON 可以通过严格校验，超时不重复调用", asyn
   ).rejects.toMatchObject({ code: "MODEL_TIMEOUT", status: 504 });
   expect(timeout).toHaveBeenCalledTimes(1);
 });
+it("格式失败重试携带具体字段限制与上次输出，修复后才返回", async () => {
+  const invalid = mockPlan(input);
+  invalid.days[0].items[0].details!.reason = "很长的推荐理由".repeat(100);
+  const correct: any = mockPlan(input);
+  correct.days[0].items[0].lat = null;
+  correct.days[0].items[0].lng = null;
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(invalid) } }],
+        }),
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(correct) } }],
+        }),
+      ),
+    ) as unknown as typeof fetch;
+  const plan = await generateWithProvider(input, "private-key", { fetcher });
+  expect(plan.days).toHaveLength(2);
+  expect(plan.days[0].items[0].lat).toBeUndefined();
+  const request = JSON.parse(String(vi.mocked(fetcher).mock.calls[1][1]?.body));
+  expect(request.response_format.type).toBe("json_schema");
+  expect(
+    request.messages.find((m: any) => m.role === "assistant").content,
+  ).toBe(JSON.stringify(invalid));
+  expect(request.messages.at(-1).content).toContain("推荐理由");
+  expect(request.messages.at(-1).content).toContain("250");
+});
+it("修复失败返回可定位的字段提示，不暴露模型原始文字，调用最多两次", async () => {
+  const plan = mockPlan(input);
+  plan.days[0].items[0].details!.reason = "private-model-content".repeat(100);
+  const fetcher = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(plan) } }],
+        }),
+      ),
+  ) as unknown as typeof fetch;
+  try {
+    await generateWithProvider(input, "private-key", { fetcher });
+    throw new Error("Should reject");
+  } catch (e) {
+    expect((e as Error).message).toContain("推荐理由");
+    expect((e as Error).message).not.toContain("private-model-content");
+    expect((e as Error).message).not.toContain("private-key");
+  }
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+it("结构化模型明确拒绝时不把空内容当格式错误重复调用", async () => {
+  const fetcher = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            { message: { content: null, refusal: "private refusal details" } },
+          ],
+        }),
+      ),
+  ) as unknown as typeof fetch;
+  await expect(
+    generateWithProvider(input, "private-key", { fetcher }),
+  ).rejects.toMatchObject({ code: "MODEL_REFUSAL" });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});

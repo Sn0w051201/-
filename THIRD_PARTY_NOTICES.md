@@ -30,3 +30,5 @@ React/React DOM、Vite、TypeScript、Zod、CloudBase JavaScript SDK / Node SDK�
 `src/data/world-paths.json` 从 [Natural Earth 1:110m admin 0 countries](https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_admin_0_countries.geojson) 外环坐标转换为 SVG 路径，公共领域（https://www.naturalearthdata.com/about/terms-of-use/），用于足迹示意。
 
 新增依赖：Tailwind CSS / @tailwindcss/vite（MIT）、Recharts（MIT）、Prettier（MIT 开发工具）。天气由 Open-Meteo Forecast API 提供，页面保留署名；使用政策见 https://open-meteo.com/en/terms 。目的地编辑资料为本项目维护的旅行参考，不等于实时旅游信息。
+
+`zod-to-json-schema`（ISC）用于把已有 Zod 领域结构转换为服务端的结构化输出约束，保留安装包中的原始许可；不会向前端提供模型凭据。
