@@ -1,3 +1,4 @@
+import { detailedPlan } from './guides';
 import type { AppState, Trip } from '../domain/types';
 export const members = [
   { id: 'me', name: '小沐', color: '#8a709e', role: 'owner' as const },
@@ -35,5 +36,19 @@ export function seedState(): AppState {
     ],
   };
   const second: Trip = {id:'hangzhou-weekend',ownerId:'me',title:'把周末，交给杭州',destination:'杭州',startDate:'2026-11-21',budgetMinor:300000,pace:'balanced',interests:['人文漫步','当地美食'],members:structuredClone(members.slice(0,2)),days:[{id:'hz1',theme:'西湖边的慢日子',items:[]},{id:'hz2',theme:'茶香与山间步道',items:[]}],expenses:[],checklist:[],version:1,cover:'mountain'};
+  // Only new/reset demo state is enriched; existing browser data is never overwritten.
+  for (const t of [trip,second]) {
+    const guide=detailedPlan({destination:t.destination,days:t.days.length,travelers:t.members.length,budgetMinor:t.budgetMinor,pace:t.pace,interests:t.interests});
+    t.days=t.days.map((day,dayIndex)=>{
+      const items=guide.days[dayIndex].items.map((a,i)=>({...a,id:`seed-detail-${t.id}-${dayIndex}-${i}`,done:false}));
+      for(const old of day.items){
+        const slot=old.type==='food'?'lunch':old===day.items[0]?'morning':'afternoon';
+        const index=items.findIndex(a=>a.slot===slot);if(index<0)continue;
+        const candidate=items[index];if(!candidate.details)continue;const matches=candidate.name===old.name;
+        items[index]={...candidate,...old,slot:candidate.slot,time:candidate.time,...(!matches?{details:{...candidate.details,reason:old.note,highlights:[`围绕${old.address}慢慢体验，按当天体力决定停留。`,'把三餐与休息安排在邻近片区，避免为了打卡来回赶路。'],transport:'从前一站查询实际导航，合理选择步行或乘车，路程与费用以当天情况为准。',reservation:old.note,alternatives:['下雨或临时关闭时，改去同片区已确认营业的书店、茶馆或室内展陈。'],sources:candidate.details.sources.map(source=>({...source,query:`${t.destination} ${old.name} 近期评价 营业 预约`}))}}:{})};
+      }
+      return {...day,items};
+    });
+  }
   return {schemaVersion:1,trips:[trip,second],activeTripId:trip.id,profile:{name:'小沐'},userId:'me'};
 }
