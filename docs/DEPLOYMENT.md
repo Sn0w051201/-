@@ -81,4 +81,4 @@ npm run deploy:pages
 
 首次需在 GitHub 仓库 Settings → Pages，将 Source 设为 Deploy from a branch，Branch 选 gh-pages，目录 / (root)，保存。只有 Pages 构建成功并能从公网读取后才算部署完成；仅分支推送成功不等于网页已经上线。
 
-配置预期网址为 `https://sn0w051201.github.io/-/`，在 GitHub Pages 实际启用前，该地址可能返回 404。大陆网络可达性取决于用户网络，不能保证所有网络都能访问 GitHub Pages。
+在线演示网址为 `https://sn0w051201.github.io/-/`。2026-10-21 已验证公网 HTML、JS、CSS、图片均返回 HTTP 200；从公网获取经 TLS 验证的资源后，桌面/手机浏览器渲染、PNG 下载与只读分享检查均通过。云端 Chromium 对代理 CA 的信任与系统请求客户端不同，因此浏览器检查通过使用现有受信 CA 的请求客户端转送公开资源，未关闭 TLS 验证。大陆网络可达性取决于用户网络，不能保证所有网络都能访问 GitHub Pages。
