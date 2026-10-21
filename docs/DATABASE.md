@@ -50,3 +50,9 @@
 ## 仍需真实环境验证
 
 事务冲突、匿名身份注入、数组成员查询索引、五分钟云存储 URL、七天分享失效、多账号拒绝矩阵，以及回收过期分享/邀请码/缓存和孤立凭证。删除账单目前只去掉凭证引用，不自动删除文件；上线前补回收任务与旅行/账号删除流程。
+
+## 网页升级的本地字段
+
+AppState 增加可选 `favorites`, `customDestinations`, `destinationEdits`, `hiddenDestinations`, `feed`, `preferences.theme`；Trip 增加可选 `visited`, `photos`，Expense 增加可选 `estimateId`。费用预估从活动推导，绝不自动写成实际支出。照片压缩 JPEG 保存在本地，JSON 备份包含照片；模型 Key/代理令牌用独立浏览器键存储，不进入备份。
+
+本地模式总数据上限4.5MB，云端旅行文档仍保持900KB。新增照片墙仅本地可用；未实现照片同步。发现收藏/主题云同步待接入，原数据库规则不因此放宽。

@@ -12,15 +12,20 @@
     "test:e2e": "playwright test",
     "build:cloud": "node scripts/build-cloud.mjs",
     "check": "npm run typecheck && npm test && npm run build && npm run build:cloud",
-    "deploy:pages": "node scripts/deploy-pages.mjs"
+    "deploy:pages": "node scripts/deploy-pages.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "start:server": "NODE_ENV=production node --env-file-if-exists=.env server-dist/server.mjs"
   },
   "dependencies": {
     "@cloudbase/js-sdk": "^2.23.0",
+    "@tailwindcss/vite": "^4.3.3",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^3.10.1",
+    "tailwindcss": "^4.3.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
@@ -33,11 +38,12 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "esbuild": "^0.25.0",
+    "prettier": "^3.9.10",
     "typescript": "~5.7.2",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   }
 }

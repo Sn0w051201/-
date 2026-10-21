@@ -1,21 +1,100 @@
-import type { AppState, Trip } from '../domain/types';
-import { seedState } from '../data/seed';
-import { validateTrip } from '../domain/trip-schema';
-export const STORAGE_KEY = 'moodnomad-web-v1';
+import type { AppState, Trip } from "../domain/types";
+import { seedState } from "../data/seed";
+import { validateTrip } from "../domain/trip-schema";
+import { destinationSchema } from "../domain/destination-schema";
+export const STORAGE_KEY = "moodnomad-web-v1";
 export function validateState(value: unknown): value is AppState {
   try {
-    const s=value as AppState;
-    if (s?.schemaVersion!==1 || !Array.isArray(s.trips) || !s.profile || typeof s.profile.name!=='string' || typeof s.userId!=='string') return false;
-    if (s.trips.length>100) return false;
-    if(typeof s.activeTripId!=='string'||s.profile.name.length>30||new Set(s.trips.map(t=>t.id)).size!==s.trips.length)return false;
-    for(const t of s.trips)validateTrip(t);
+    const s = value as AppState;
+    if (
+      s?.schemaVersion !== 1 ||
+      !Array.isArray(s.trips) ||
+      !s.profile ||
+      typeof s.profile.name !== "string" ||
+      typeof s.userId !== "string"
+    )
+      return false;
+    if (
+      s.trips.length > 100 ||
+      new TextEncoder().encode(JSON.stringify(s)).length > 4500000
+    )
+      return false;
+    if (
+      typeof s.activeTripId !== "string" ||
+      s.profile.name.length > 30 ||
+      new Set(s.trips.map((t) => t.id)).size !== s.trips.length
+    )
+      return false;
+    for (const t of s.trips) validateTrip(t, 4500000);
+    if (
+      s.favorites &&
+      (!Array.isArray(s.favorites) ||
+        s.favorites.length > 500 ||
+        s.favorites.some((x) => typeof x !== "string"))
+    )
+      return false;
+    for (const list of [s.customDestinations, s.destinationEdits]) {
+      if (list && (!Array.isArray(list) || list.length > 200)) return false;
+      for (const d of list || []) destinationSchema.parse(d);
+    }
+    if (
+      s.hiddenDestinations &&
+      (!Array.isArray(s.hiddenDestinations) ||
+        s.hiddenDestinations.some((x) => typeof x !== "string"))
+    )
+      return false;
+    if (
+      s.preferences &&
+      !["light", "dark", "system"].includes(s.preferences.theme)
+    )
+      return false;
+    if (
+      s.feed &&
+      (!Array.isArray(s.feed) ||
+        s.feed.length > 100 ||
+        s.feed.some(
+          (f) =>
+            typeof f.id !== "string" ||
+            typeof f.tripId !== "string" ||
+            typeof f.text !== "string" ||
+            typeof f.at !== "string",
+        ))
+    )
+      return false;
     return true;
-  }catch{return false;}
+  } catch {
+    return false;
+  }
 }
 export function loadState(): { state: AppState; error?: string } {
-  try {const raw=localStorage.getItem(STORAGE_KEY);if(!raw)return {state:seedState()};const state=JSON.parse(raw);if(!validateState(state))throw new Error();return {state};}
-  catch{return {state:seedState(),error:'本地数据无法读取，已载入示例。原数据未覆盖；请先导出或重置后保存。'};}
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { state: seedState() };
+    const state = JSON.parse(raw);
+    if (!validateState(state)) throw new Error();
+    return { state };
+  } catch {
+    return {
+      state: seedState(),
+      error:
+        "本地数据无法读取，已载入示例。原数据未覆盖；请先导出或重置后保存。",
+    };
+  }
 }
-export function saveState(state: AppState) {localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}
-export function addDays(date:string,days:number){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+days);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-export function tripDate(trip:Trip){const fmt=(date:string)=>{const [,m,d]=date.split('-');return `${Number(m)}.${Number(d)}`;};return `${fmt(trip.startDate)} — ${fmt(addDays(trip.startDate,trip.days.length-1))}`;}
+export function saveState(state: AppState) {
+  if (!validateState(state))
+    throw new Error("数据无效或超过4.5MB容量，请减少照片");
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+export function addDays(date: string, days: number) {
+  const d = new Date(date + "T12:00:00");
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+export function tripDate(trip: Trip) {
+  const fmt = (date: string) => {
+    const [, m, d] = date.split("-");
+    return `${Number(m)}.${Number(d)}`;
+  };
+  return `${fmt(trip.startDate)} — ${fmt(addDays(trip.startDate, trip.days.length - 1))}`;
+}

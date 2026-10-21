@@ -1,31 +1,639 @@
-import Recommendation, { Coverage,slotLabels } from '../components/Recommendation';
-import { heroImage } from '../data/assets';
-import { useState } from 'react';
-import { ArrowDown, ArrowUp, CalendarDays, Check, Clock3, Coffee, MapPin, MoreHorizontal, Pencil, Plus, Route, Share2, Sparkles, Trash2, Users } from 'lucide-react';
-import { useMood } from '../context';
-import { Avatar, AvatarStack, Button, Empty, Field, IconButton, Modal, PageHeading } from '../components/UI';
-import type { Activity, Member } from '../domain/types';
-import { uid } from '../domain/types';
-import { money, parseMoney } from '../domain/money';
-import { addDays, tripDate } from '../services/storage';
-export default function Itinerary(){
- const {state,trip,selectTrip,openCreate,updateTrip,setView,canEdit,isOwner,saving,notify,cloud}=useMood();const [dayIndex,setDayIndex]=useState(0);const [edit,setEdit]=useState<Activity|null|undefined>();const [memberModal,setMemberModal]=useState(false);const [deleting,setDeleting]=useState<string|null>(null);
- const day=trip.days[Math.min(dayIndex,trip.days.length-1)];const items=day?.items||[];
- const toggle=(a:Activity)=>void updateTrip(t=>({...t,days:t.days.map(d=>d.id===day.id?{...d,items:d.items.map(x=>x.id===a.id?{...x,done:!x.done}:x)}:d)}));
- const move=(index:number,offset:number)=>void updateTrip(t=>({...t,days:t.days.map(d=>{if(d.id!==day.id)return d;const a=[...d.items];[a[index],a[index+offset]]=[a[index+offset],a[index]];return {...d,items:a};})}));
- return <div className="fade-in"><PageHeading eyebrow="YOUR NEXT CHAPTER" title="我的行程" description="不用把每天排满，留一点空白给惊喜。" action={<Button onClick={openCreate}><Plus size={17}/>创建旅行</Button>}/><div className="trip-select-row"><label>正在计划<select aria-label="选择旅行" value={trip.id} onChange={e=>{selectTrip(e.target.value);setDayIndex(0);}}>{state.trips.map(t=><option value={t.id} key={t.id}>{t.title}</option>)}</select></label><span className="subtle">{state.trips.length} 场旅行，{state.trips.reduce((n,t)=>n+t.days.length,0)} 天期待</span></div>
- {!trip.id?<Empty title="旅途的第一步，从这里开始" description="创建旅行，或者让 AI 帮你规划一个好周末。" action={<Button onClick={openCreate}>创建第一场旅行</Button>}/>:<><section className="trip-detail-hero"><img src={heroImage} alt="湖畔旅行风景"/><div/><section><span className="hero-kicker">LET'S WANDER TOGETHER</span><h2>{trip.title}</h2><p><MapPin size={15}/>{trip.destination}<span>·</span><CalendarDays size={15}/>{tripDate(trip)}<span>·</span>{trip.days.length} 天</p><AvatarStack members={trip.members}/></section><div className="trip-hero-actions"><Button variant="secondary" onClick={()=>setMemberModal(true)}><Users size={16}/>旅伴管理</Button><Button variant="secondary" onClick={()=>setView('share')}><Share2 size={16}/>分享旅行</Button></div></section>
- {trip.days.some(d=>d.items.length>0&&!d.items.some(a=>a.slot==='dinner'))&&<div className="guide-upgrade"><div><strong>把吃喝玩乐，也安排进这段旅途</strong><p>新版攻略包含三餐、茶歇、街区夜游、推荐理由与口碑核验。原行程不会自动覆盖。</p></div><Button variant="secondary" onClick={()=>setView('planner')}>生成完整攻略<ArrowUp size={14}/></Button></div>}<div className="trip-toolbar"><div className="day-tabs">{trip.days.map((d,i)=><button key={d.id} className={day?.id===d.id?'active':''} onClick={()=>setDayIndex(i)}><small>DAY {String(i+1).padStart(2,'0')}</small><span>{addDays(trip.startDate,i).slice(5).replace('-','月')}日</span></button>)}</div><Button variant="secondary" onClick={()=>setView('planner')}><Sparkles size={16}/>AI 帮我规划</Button></div>
- {day&&<div className="itinerary-heading"><div><h2>{day.theme}</h2><p>{items.length} 个安排 · 预计合计 ¥{money(items.reduce((n,a)=>n+a.costMinor,0))} · 费用仅供参考</p></div><Button disabled={!canEdit} onClick={()=>setEdit(null)}><Plus size={16}/>添加安排</Button></div>}
- {items.some(a=>a.slot)&&<Coverage items={items}/>}<div className="itinerary-list">{items.map((a,i)=><article key={a.id} className={`activity-card ${a.done?'activity-done':''}`}><div className="activity-clock"><strong>{a.time}</strong><span>{a.duration} 分钟</span><span className="activity-index">{String(i+1).padStart(2,'0')}</span></div><div className="activity-type"><span className={`stat-icon ${a.type==='food'?'orange':'purple'}`}>{a.type==='food'?<Coffee size={22}/>:<MapPin size={22}/>}</span></div><div className="activity-content"><div className="activity-title"><h3>{a.name}</h3>{a.slot&&<span className="guide-slot">{slotLabels[a.slot]}</span>}<span className="pill pill-neutral">{{attraction:'探索风景',food:'寻味当地',rest:'自由时光',hotel:'安心入住',transport:'在路上',shopping:'逛街购物',nightlife:'夜间活动'}[a.type]}</span></div><p className="activity-address"><MapPin size={13}/>{a.address||'地点待定'}</p><p>{a.note}</p><Recommendation item={a}/><div className="activity-meta"><span><Clock3 size={13}/>{a.duration} 分钟</span><span>预计 ¥{money(a.costMinor)}</span><small>出发前请核验</small></div></div><div className="activity-actions"><button className={`checkin-btn ${a.done?'checked':''}`} disabled={!canEdit||saving} onClick={()=>toggle(a)}><Check size={14}/>{a.done?'已打卡':'去打卡'}</button><div className="activity-edit"><IconButton label={`编辑${a.name}`} disabled={!canEdit} onClick={()=>setEdit(a)}><Pencil size={15}/></IconButton><IconButton label={`上移${a.name}`} disabled={!canEdit||i===0} onClick={()=>move(i,-1)}><ArrowUp size={15}/></IconButton><IconButton label={`下移${a.name}`} disabled={!canEdit||i===items.length-1} onClick={()=>move(i,1)}><ArrowDown size={15}/></IconButton><IconButton label={`删除${a.name}`} disabled={!canEdit} onClick={()=>setDeleting(a.id)}><Trash2 size={15}/></IconButton></div></div></article>)}</div>
- {!items.length&&<Empty title="这一天，等你来安排" description="添加一个想去的地方，或者生成一份 AI 攻略。" action={<Button disabled={!canEdit} onClick={()=>setEdit(null)}><Plus size={16}/>添加第一个安排</Button>}/>}
- <p className="bottom-note"><Route size={16}/>攻略是灵感，不是实时事实。营业时间、门票和交通请在出发前确认。</p></>}
- {edit!==undefined&&day&&<ActivityForm activity={edit} onClose={()=>setEdit(undefined)} onSave={async item=>{const ok=await updateTrip(t=>({...t,days:t.days.map(d=>d.id===day.id?{...d,items:edit?d.items.map(a=>a.id===edit.id?item:a):[...d.items,item]}:d)}));if(ok){setEdit(undefined);notify('行程安排已保存');}}}/>}
- {deleting&&<Modal title="移除这项安排？" description="其他安排和已记录的费用不会受影响。" onClose={()=>setDeleting(null)}><div className="modal-actions"><Button variant="secondary" onClick={()=>setDeleting(null)}>保留</Button><Button onClick={async()=>{if(await updateTrip(t=>({...t,days:t.days.map(d=>({...d,items:d.items.filter(a=>a.id!==deleting)}))})))setDeleting(null);}}>确认移除</Button></div></Modal>}
- {memberModal&&<Modal title="好风景，和他们一起看" description={cloud?'通过云端邀请码邀请真实旅伴，以下角色修改仅创建者可用。':'本地演示：成员和角色只在当前浏览器生效，不会发送真实邀请。'} onClose={()=>setMemberModal(false)}><div className="members-list">{trip.members.map(m=><div className="member-row" key={m.id}><Avatar member={m}/><strong>{m.name}{m.id===state.userId?'（我）':''}</strong>{isOwner&&m.role!=='owner'?<select aria-label={`${m.name}的角色`} value={m.role} onChange={e=>void updateTrip(t=>({...t,members:t.members.map(x=>x.id===m.id?{...x,role:e.target.value as Member['role']}:x)}))}><option value="editor">可编辑</option><option value="viewer">只读</option></select>:<span className="pill pill-purple">{m.role==='owner'?'创建者':m.role==='editor'?'可编辑':'只读'}</span>}</div>)}</div>{isOwner&&!cloud&&<form className="inline-form" onSubmit={async e=>{e.preventDefault();const form=e.currentTarget;const f=new FormData(form);const name=String(f.get('name')).trim();if(!name)return;if(trip.members.length>=20){notify('MVP 最多支持 20 位旅伴','error');return;}if(await updateTrip(t=>({...t,members:[...t.members,{id:uid(),name,color:'#8ca58f',role:'editor'}]})))form.reset();}}><input name="name" aria-label="新旅伴昵称" maxLength={16} placeholder="新旅伴昵称" required/><Button type="submit"><Plus size={16}/>添加演示旅伴</Button></form>}{cloud&&<p className="form-note">真实云端邀请：请在偏好与数据页创建或使用邀请码。</p>}<div className="modal-actions"><Button onClick={()=>setMemberModal(false)}>准备好啦</Button></div></Modal>}
- </div>;
+import TripEditor from "../components/TripEditor";
+import Recommendation, {
+  Coverage,
+  slotLabels,
+} from "../components/Recommendation";
+import { heroImage } from "../data/assets";
+import { useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CalendarDays,
+  Check,
+  Clock3,
+  Coffee,
+  MapPin,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Route,
+  Share2,
+  Sparkles,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { useMood } from "../context";
+import {
+  Avatar,
+  AvatarStack,
+  Button,
+  Empty,
+  Field,
+  IconButton,
+  Modal,
+  PageHeading,
+} from "../components/UI";
+import type { Activity, Member } from "../domain/types";
+import { uid } from "../domain/types";
+import { money, parseMoney } from "../domain/money";
+import { addDays, tripDate } from "../services/storage";
+export default function Itinerary() {
+  const {
+    state,
+    trip,
+    selectTrip,
+    openCreate,
+    updateTrip,
+    setView,
+    canEdit,
+    isOwner,
+    saving,
+    notify,
+    cloud,
+  } = useMood();
+  const [dayIndex, setDayIndex] = useState(0);
+  const [edit, setEdit] = useState<Activity | null | undefined>();
+  const [memberModal, setMemberModal] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const day = trip.days[Math.min(dayIndex, trip.days.length - 1)];
+  const items = day?.items || [];
+  const toggle = (a: Activity) =>
+    void updateTrip((t) => ({
+      ...t,
+      days: t.days.map((d) =>
+        d.id === day.id
+          ? {
+              ...d,
+              items: d.items.map((x) =>
+                x.id === a.id ? { ...x, done: !x.done } : x,
+              ),
+            }
+          : d,
+      ),
+    }));
+  const move = (index: number, offset: number) =>
+    void updateTrip((t) => ({
+      ...t,
+      days: t.days.map((d) => {
+        if (d.id !== day.id) return d;
+        const a = [...d.items];
+        [a[index], a[index + offset]] = [a[index + offset], a[index]];
+        return { ...d, items: a };
+      }),
+    }));
+  return (
+    <div className="fade-in">
+      <PageHeading
+        eyebrow="YOUR NEXT CHAPTER"
+        title="我的行程"
+        description="不用把每天排满，留一点空白给惊喜。"
+        action={
+          <Button onClick={openCreate}>
+            <Plus size={17} />
+            创建旅行
+          </Button>
+        }
+      />
+      <div className="trip-select-row">
+        <label>
+          正在计划
+          <select
+            aria-label="选择旅行"
+            value={trip.id}
+            onChange={(e) => {
+              selectTrip(e.target.value);
+              setDayIndex(0);
+            }}
+          >
+            {state.trips.map((t) => (
+              <option value={t.id} key={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="subtle">
+          {state.trips.length} 场旅行，
+          {state.trips.reduce((n, t) => n + t.days.length, 0)} 天期待
+        </span>
+      </div>
+      {!trip.id ? (
+        <Empty
+          title="旅途的第一步，从这里开始"
+          description="创建旅行，或者让 AI 帮你规划一个好周末。"
+          action={<Button onClick={openCreate}>创建第一场旅行</Button>}
+        />
+      ) : (
+        <>
+          <section className="trip-detail-hero">
+            <img src={heroImage} alt="湖畔旅行风景" />
+            <div />
+            <section>
+              <span className="hero-kicker">LET'S WANDER TOGETHER</span>
+              <h2>{trip.title}</h2>
+              <p>
+                <MapPin size={15} />
+                {trip.destination}
+                <span>·</span>
+                <CalendarDays size={15} />
+                {tripDate(trip)}
+                <span>·</span>
+                {trip.days.length} 天
+              </p>
+              <AvatarStack members={trip.members} />
+            </section>
+            <div className="trip-hero-actions">
+              <Button variant="secondary" onClick={() => setMemberModal(true)}>
+                <Users size={16} />
+                旅伴管理
+              </Button>
+              <Button variant="secondary" onClick={() => setView("share")}>
+                <Share2 size={16} />
+                分享旅行
+              </Button>
+            </div>
+          </section>
+          <TripEditor />
+          {trip.days.some(
+            (d) =>
+              d.items.length > 0 && !d.items.some((a) => a.slot === "dinner"),
+          ) && (
+            <div className="guide-upgrade">
+              <div>
+                <strong>把吃喝玩乐，也安排进这段旅途</strong>
+                <p>
+                  新版攻略包含三餐、茶歇、街区夜游、推荐理由与口碑核验。原行程不会自动覆盖。
+                </p>
+              </div>
+              <Button variant="secondary" onClick={() => setView("planner")}>
+                生成完整攻略
+                <ArrowUp size={14} />
+              </Button>
+            </div>
+          )}
+          <div className="trip-toolbar">
+            <div className="day-tabs">
+              {trip.days.map((d, i) => (
+                <button
+                  key={d.id}
+                  className={day?.id === d.id ? "active" : ""}
+                  onClick={() => setDayIndex(i)}
+                >
+                  <small>DAY {String(i + 1).padStart(2, "0")}</small>
+                  <span>
+                    {addDays(trip.startDate, i).slice(5).replace("-", "月")}日
+                  </span>
+                </button>
+              ))}
+            </div>
+            <Button variant="secondary" onClick={() => setView("planner")}>
+              <Sparkles size={16} />
+              AI 帮我规划
+            </Button>
+          </div>
+          {day && (
+            <div className="itinerary-heading">
+              <div>
+                <h2>{day.theme}</h2>
+                <p>
+                  {items.length} 个安排 · 预计合计 ¥
+                  {money(items.reduce((n, a) => n + a.costMinor, 0))} ·
+                  费用仅供参考
+                </p>
+              </div>
+              <Button disabled={!canEdit} onClick={() => setEdit(null)}>
+                <Plus size={16} />
+                添加安排
+              </Button>
+            </div>
+          )}
+          {items.some((a) => a.slot) && <Coverage items={items} />}
+          <div className="itinerary-list">
+            {items.map((a, i) => (
+              <article
+                key={a.id}
+                className={`activity-card ${a.done ? "activity-done" : ""}`}
+              >
+                <div className="activity-clock">
+                  <strong>{a.time}</strong>
+                  <span>{a.duration} 分钟</span>
+                  <span className="activity-index">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                </div>
+                <div className="activity-type">
+                  <span
+                    className={`stat-icon ${a.type === "food" ? "orange" : "purple"}`}
+                  >
+                    {a.type === "food" ? (
+                      <Coffee size={22} />
+                    ) : (
+                      <MapPin size={22} />
+                    )}
+                  </span>
+                </div>
+                <div className="activity-content">
+                  <div className="activity-title">
+                    <h3>{a.name}</h3>
+                    {a.slot && (
+                      <span className="guide-slot">{slotLabels[a.slot]}</span>
+                    )}
+                    <span className="pill pill-neutral">
+                      {
+                        {
+                          attraction: "探索风景",
+                          food: "寻味当地",
+                          rest: "自由时光",
+                          hotel: "安心入住",
+                          transport: "在路上",
+                          shopping: "逛街购物",
+                          nightlife: "夜间活动",
+                        }[a.type]
+                      }
+                    </span>
+                  </div>
+                  <p className="activity-address">
+                    <MapPin size={13} />
+                    {a.address || "地点待定"}
+                  </p>
+                  <p>{a.note}</p>
+                  <Recommendation item={a} />
+                  <div className="activity-meta">
+                    <span>
+                      <Clock3 size={13} />
+                      {a.duration} 分钟
+                    </span>
+                    <span>预计 ¥{money(a.costMinor)}</span>
+                    <small>出发前请核验</small>
+                  </div>
+                </div>
+                <div className="activity-actions">
+                  <button
+                    className={`checkin-btn ${a.done ? "checked" : ""}`}
+                    disabled={!canEdit || saving}
+                    onClick={() => toggle(a)}
+                  >
+                    <Check size={14} />
+                    {a.done ? "已打卡" : "去打卡"}
+                  </button>
+                  <div className="activity-edit">
+                    <IconButton
+                      label={`编辑${a.name}`}
+                      disabled={!canEdit}
+                      onClick={() => setEdit(a)}
+                    >
+                      <Pencil size={15} />
+                    </IconButton>
+                    <IconButton
+                      label={`上移${a.name}`}
+                      disabled={!canEdit || i === 0}
+                      onClick={() => move(i, -1)}
+                    >
+                      <ArrowUp size={15} />
+                    </IconButton>
+                    <IconButton
+                      label={`下移${a.name}`}
+                      disabled={!canEdit || i === items.length - 1}
+                      onClick={() => move(i, 1)}
+                    >
+                      <ArrowDown size={15} />
+                    </IconButton>
+                    <IconButton
+                      label={`删除${a.name}`}
+                      disabled={!canEdit}
+                      onClick={() => setDeleting(a.id)}
+                    >
+                      <Trash2 size={15} />
+                    </IconButton>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+          {!items.length && (
+            <Empty
+              title="这一天，等你来安排"
+              description="添加一个想去的地方，或者生成一份 AI 攻略。"
+              action={
+                <Button disabled={!canEdit} onClick={() => setEdit(null)}>
+                  <Plus size={16} />
+                  添加第一个安排
+                </Button>
+              }
+            />
+          )}
+          <p className="bottom-note">
+            <Route size={16} />
+            攻略是灵感，不是实时事实。营业时间、门票和交通请在出发前确认。
+          </p>
+        </>
+      )}
+      {edit !== undefined && day && (
+        <ActivityForm
+          activity={edit}
+          onClose={() => setEdit(undefined)}
+          onSave={async (item) => {
+            const ok = await updateTrip((t) => ({
+              ...t,
+              days: t.days.map((d) =>
+                d.id === day.id
+                  ? {
+                      ...d,
+                      items: edit
+                        ? d.items.map((a) => (a.id === edit.id ? item : a))
+                        : [...d.items, item],
+                    }
+                  : d,
+              ),
+            }));
+            if (ok) {
+              setEdit(undefined);
+              notify("行程安排已保存");
+            }
+          }}
+        />
+      )}
+      {deleting && (
+        <Modal
+          title="移除这项安排？"
+          description="其他安排和已记录的费用不会受影响。"
+          onClose={() => setDeleting(null)}
+        >
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={() => setDeleting(null)}>
+              保留
+            </Button>
+            <Button
+              onClick={async () => {
+                if (
+                  await updateTrip((t) => ({
+                    ...t,
+                    days: t.days.map((d) => ({
+                      ...d,
+                      items: d.items.filter((a) => a.id !== deleting),
+                    })),
+                  }))
+                )
+                  setDeleting(null);
+              }}
+            >
+              确认移除
+            </Button>
+          </div>
+        </Modal>
+      )}
+      {memberModal && (
+        <Modal
+          title="好风景，和他们一起看"
+          description={
+            cloud
+              ? "通过云端邀请码邀请真实旅伴，以下角色修改仅创建者可用。"
+              : "本地演示：成员和角色只在当前浏览器生效，不会发送真实邀请。"
+          }
+          onClose={() => setMemberModal(false)}
+        >
+          <div className="members-list">
+            {trip.members.map((m) => (
+              <div className="member-row" key={m.id}>
+                <Avatar member={m} />
+                <strong>
+                  {m.name}
+                  {m.id === state.userId ? "（我）" : ""}
+                </strong>
+                {isOwner && m.role !== "owner" ? (
+                  <select
+                    aria-label={`${m.name}的角色`}
+                    value={m.role}
+                    onChange={(e) =>
+                      void updateTrip((t) => ({
+                        ...t,
+                        members: t.members.map((x) =>
+                          x.id === m.id
+                            ? { ...x, role: e.target.value as Member["role"] }
+                            : x,
+                        ),
+                      }))
+                    }
+                  >
+                    <option value="editor">可编辑</option>
+                    <option value="viewer">只读</option>
+                  </select>
+                ) : (
+                  <span className="pill pill-purple">
+                    {m.role === "owner"
+                      ? "创建者"
+                      : m.role === "editor"
+                        ? "可编辑"
+                        : "只读"}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          {isOwner && !cloud && (
+            <form
+              className="inline-form"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const f = new FormData(form);
+                const name = String(f.get("name")).trim();
+                if (!name) return;
+                if (trip.members.length >= 20) {
+                  notify("MVP 最多支持 20 位旅伴", "error");
+                  return;
+                }
+                if (
+                  await updateTrip((t) => ({
+                    ...t,
+                    members: [
+                      ...t.members,
+                      { id: uid(), name, color: "#8ca58f", role: "editor" },
+                    ],
+                  }))
+                )
+                  form.reset();
+              }}
+            >
+              <input
+                name="name"
+                aria-label="新旅伴昵称"
+                maxLength={16}
+                placeholder="新旅伴昵称"
+                required
+              />
+              <Button type="submit">
+                <Plus size={16} />
+                添加演示旅伴
+              </Button>
+            </form>
+          )}
+          {cloud && (
+            <p className="form-note">
+              真实云端邀请：请在偏好与数据页创建或使用邀请码。
+            </p>
+          )}
+          <div className="modal-actions">
+            <Button onClick={() => setMemberModal(false)}>准备好啦</Button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
 }
-function ActivityForm({activity,onClose,onSave}:{activity:Activity|null;onClose:()=>void;onSave:(item:Activity)=>Promise<void>}){
- const [error,setError]=useState('');const {saving}=useMood();
- return <Modal title={activity?'编辑这段小美好':'添一段新的旅途'} onClose={onClose}><form onSubmit={async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const name=String(f.get('name')).trim();if(!name)throw new Error('请填写安排名称');const lat=f.get('lat')?Number(f.get('lat')):undefined;const lng=f.get('lng')?Number(f.get('lng')):undefined;if((lat===undefined)!==(lng===undefined))throw new Error('经纬度需要同时填写');await onSave({id:activity?.id||uid(),name,time:String(f.get('time')),duration:Number(f.get('duration')),type:String(f.get('type')) as Activity['type'],costMinor:parseMoney(String(f.get('cost'))),address:String(f.get('address')),note:String(f.get('note')),done:activity?.done||false,lat,lng,...(activity?.slot?{slot:activity.slot}:{}),...(activity?.details&&activity.name===name&&activity.address===String(f.get('address'))?{details:activity.details}:{})});}catch(err){setError((err as Error).message);}}}><Field label="安排名称"><input name="name" defaultValue={activity?.name} required maxLength={100} autoFocus/></Field><div className="form-row"><Field label="开始时间"><input name="time" type="time" defaultValue={activity?.time||'09:00'} required/></Field><Field label="停留时长（分钟）"><input name="duration" type="number" min="1" max="1440" defaultValue={activity?.duration||90} required/></Field></div><div className="form-row"><Field label="类型"><select name="type" defaultValue={activity?.type||'attraction'}><option value="attraction">景点</option><option value="food">美食</option><option value="transport">交通</option><option value="rest">休息</option><option value="hotel">住宿</option><option value="shopping">逛街购物</option><option value="nightlife">夜间活动</option></select></Field><Field label="全员预计费用（元）"><input name="cost" inputMode="decimal" defaultValue={money(activity?.costMinor||0).replaceAll(',','')} required/></Field></div><Field label="地址"><input name="address" maxLength={200} defaultValue={activity?.address} placeholder="可先手动输入，坐标选填"/></Field><div className="form-row"><Field label="纬度（选填）"><input name="lat" type="number" step="any" min="-90" max="90" defaultValue={activity?.lat}/></Field><Field label="经度（选填）"><input name="lng" type="number" step="any" min="-180" max="180" defaultValue={activity?.lng}/></Field></div><Field label="小备注"><textarea name="note" maxLength={500} defaultValue={activity?.note} placeholder="想做什么，或者有什么需要提前确认？"/></Field>{error&&<p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><Button variant="secondary" type="button" onClick={onClose}>取消</Button><Button type="submit" disabled={saving}>保存安排</Button></div></form></Modal>;
+function ActivityForm({
+  activity,
+  onClose,
+  onSave,
+}: {
+  activity: Activity | null;
+  onClose: () => void;
+  onSave: (item: Activity) => Promise<void>;
+}) {
+  const [error, setError] = useState("");
+  const { saving } = useMood();
+  return (
+    <Modal
+      title={activity ? "编辑这段小美好" : "添一段新的旅途"}
+      onClose={onClose}
+    >
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          try {
+            const name = String(f.get("name")).trim();
+            if (!name) throw new Error("请填写安排名称");
+            const lat = f.get("lat") ? Number(f.get("lat")) : undefined;
+            const lng = f.get("lng") ? Number(f.get("lng")) : undefined;
+            if ((lat === undefined) !== (lng === undefined))
+              throw new Error("经纬度需要同时填写");
+            await onSave({
+              id: activity?.id || uid(),
+              name,
+              time: String(f.get("time")),
+              duration: Number(f.get("duration")),
+              type: String(f.get("type")) as Activity["type"],
+              costMinor: parseMoney(String(f.get("cost"))),
+              address: String(f.get("address")),
+              note: String(f.get("note")),
+              done: activity?.done || false,
+              lat,
+              lng,
+              ...(activity?.slot ? { slot: activity.slot } : {}),
+              ...(activity?.details &&
+              activity.name === name &&
+              activity.address === String(f.get("address"))
+                ? { details: activity.details }
+                : {}),
+            });
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+      >
+        <Field label="安排名称">
+          <input
+            name="name"
+            defaultValue={activity?.name}
+            required
+            maxLength={100}
+            autoFocus
+          />
+        </Field>
+        <div className="form-row">
+          <Field label="开始时间">
+            <input
+              name="time"
+              type="time"
+              defaultValue={activity?.time || "09:00"}
+              required
+            />
+          </Field>
+          <Field label="停留时长（分钟）">
+            <input
+              name="duration"
+              type="number"
+              min="1"
+              max="1440"
+              defaultValue={activity?.duration || 90}
+              required
+            />
+          </Field>
+        </div>
+        <div className="form-row">
+          <Field label="类型">
+            <select name="type" defaultValue={activity?.type || "attraction"}>
+              <option value="attraction">景点</option>
+              <option value="food">美食</option>
+              <option value="transport">交通</option>
+              <option value="rest">休息</option>
+              <option value="hotel">住宿</option>
+              <option value="shopping">逛街购物</option>
+              <option value="nightlife">夜间活动</option>
+            </select>
+          </Field>
+          <Field label="全员预计费用（元）">
+            <input
+              name="cost"
+              inputMode="decimal"
+              defaultValue={money(activity?.costMinor || 0).replaceAll(",", "")}
+              required
+            />
+          </Field>
+        </div>
+        <Field label="地址">
+          <input
+            name="address"
+            maxLength={200}
+            defaultValue={activity?.address}
+            placeholder="可先手动输入，坐标选填"
+          />
+        </Field>
+        <div className="form-row">
+          <Field label="纬度（选填）">
+            <input
+              name="lat"
+              type="number"
+              step="any"
+              min="-90"
+              max="90"
+              defaultValue={activity?.lat}
+            />
+          </Field>
+          <Field label="经度（选填）">
+            <input
+              name="lng"
+              type="number"
+              step="any"
+              min="-180"
+              max="180"
+              defaultValue={activity?.lng}
+            />
+          </Field>
+        </div>
+        <Field label="小备注">
+          <textarea
+            name="note"
+            maxLength={500}
+            defaultValue={activity?.note}
+            placeholder="想做什么，或者有什么需要提前确认？"
+          />
+        </Field>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="modal-actions">
+          <Button variant="secondary" type="button" onClick={onClose}>
+            取消
+          </Button>
+          <Button type="submit" disabled={saving}>
+            保存安排
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
 }

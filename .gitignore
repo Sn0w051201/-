@@ -9,3 +9,5 @@ test-results/
 cloudfunctions/api/index.js
 cloudfunctions/api/node_modules/
 config/cloudbase.local.json
+
+server-dist/
