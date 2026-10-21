@@ -10,6 +10,7 @@ import {
   clearPlanDraft,
   loadPlanDraft,
   planContextText,
+  routeFromDraft,
 } from "../services/plan-job";
 import type { PlanContext, PlanProgress } from "../services/plan-job";
 import { AIRequestError } from "../services/ai-errors";
@@ -130,6 +131,11 @@ export default function Planner() {
     setProgress(null);
     setResult(null);
     setBusy(true);
+    requestAnimationFrame(() =>
+      document
+        .querySelector(".planner-result")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
     setError("");
     setFailureKind(null);
     setApplied(false);
@@ -166,6 +172,12 @@ export default function Planner() {
             context,
             resume,
             signal: control.current.signal,
+            onRouteReady: (plan) => {
+              if (mounted.current) {
+                setResult(plan);
+                setInput(data);
+              }
+            },
             onProgress: (p) => {
               if (mounted.current) setProgress(p);
             },
@@ -173,6 +185,7 @@ export default function Planner() {
       if (!mounted.current) return;
       setAvailableDraft(loadPlanDraft());
       setResult(plan);
+      setApplied(false);
       setInput(data);
     } catch (e) {
       if (!mounted.current) return;
@@ -234,6 +247,22 @@ export default function Planner() {
                     ? "继续补全旅行手册"
                     : "继续未完成天数"}
               </Button>
+              {availableDraft.parts.length === availableDraft.input.days && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setResult(routeFromDraft(availableDraft));
+                    setInput(availableDraft.input);
+                    setDraft(availableDraft.input);
+                    setTarget(availableDraft.context?.target || "all");
+                    setNewTrip(availableDraft.context?.newTrip || false);
+                    setOffline(false);
+                    setApplied(false);
+                  }}
+                >
+                  先查看已完成路线
+                </Button>
+              )}
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -965,7 +994,7 @@ export default function Planner() {
           </form>
         </section>
         <section className="planner-result">
-          {busy ? (
+          {busy && !result ? (
             <div className="generation-state">
               <div className="ai-orb">
                 <Sparkles size={36} />
@@ -980,9 +1009,22 @@ export default function Planner() {
                       ? `已完成 ${progress.completed}/${progress.total} 天 · ${stopping ? "正在保留当前一天的结果…" : `正在生成第 ${progress.currentDay} 天`}`
                       : "正在准备逐日生成…"}
               </p>
-              <div className="generation-progress">
-                <span />
+              <div
+                className="generation-progress"
+                role="progressbar"
+                aria-label="路线生成进度"
+                aria-valuemin={0}
+                aria-valuemax={progress?.total || 1}
+                aria-valuenow={progress?.completed || 0}
+              >
+                <span
+                  style={{
+                    width: `${(100 * (progress?.completed || 0)) / (progress?.total || 1)}%`,
+                    animation: "none",
+                  }}
+                />
               </div>
+              <RequestElapsed requestKey={`day-${progress?.completed || 0}`} />
               <small>
                 {offline
                   ? "离线参考不调用真实模型。"
@@ -1012,6 +1054,58 @@ export default function Planner() {
                 <Sparkles size={13} />
                 {offline ? "离线参考 · 非 AI" : "AI 生成 · 请核验"}
               </span>
+              {busy && (
+                <section className="route-ready-status" aria-live="polite">
+                  <strong>路线已完成，可以先浏览；手册正在补充</strong>
+                  <RequestElapsed
+                    requestKey={`handbook-${progress?.guideCompleted || 0}`}
+                  />
+                  <p>
+                    手册已完成 {progress?.guideCompleted || 0}/
+                    {progress?.guideTotal || 4} 组 ·{" "}
+                    {progress?.phase === "handbook"
+                      ? "正在整理" +
+                        [
+                          "基础信息、交通与住宿",
+                          "美食购物与景点",
+                          "安全、工具与检查清单",
+                          "预算与应急预案",
+                        ][progress.guideCompleted || 0]
+                      : "正在准备"}
+                    。等待模型回复可能需要一些时间，页面仍可操作。
+                  </p>
+                  <Button
+                    variant="secondary"
+                    disabled={stopping}
+                    onClick={() => {
+                      control.current?.abort();
+                      setStopping(true);
+                    }}
+                  >
+                    {stopping ? "等待当前请求结束…" : "完成当前请求后停止"}
+                  </Button>
+                </section>
+              )}
+              {!busy &&
+                target === "all" &&
+                input?.detailedGuide &&
+                !result.handbook && (
+                  <section className="route-ready-status">
+                    <p>
+                      每日路线已完成，可先保存路线；完整手册尚未生成。继续补全不会重生成路线。
+                    </p>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const saved = loadPlanDraft();
+                        if (saved)
+                          void run(saved.input, false, saved.context, true);
+                      }}
+                    >
+                      继续补全旅行手册
+                    </Button>
+                  </section>
+                )}
               <h2>{result.title}</h2>
               <h3>一、攻略概览</h3>
               <p>{result.summary}</p>
@@ -1100,7 +1194,7 @@ export default function Planner() {
                     : "只替换所选日的安排，其他日程、账单和清单保留。"}
                 </p>
                 <Button
-                  disabled={applied || (!newTrip && !canEdit)}
+                  disabled={busy || applied || (!newTrip && !canEdit)}
                   onClick={async () => {
                     if (!input) return;
                     if (newTrip || input.travelers !== trip.members.length) {
@@ -1125,10 +1219,22 @@ export default function Planner() {
                         ),
                       )
                     ) {
-                      clearPlanDraft();
-                      setAvailableDraft(null);
+                      if (
+                        result.handbook ||
+                        !input.detailedGuide ||
+                        target !== "all"
+                      ) {
+                        clearPlanDraft();
+                        setAvailableDraft(null);
+                      }
                       setApplied(true);
-                      notify("攻略已保存，可以继续编辑每一项安排");
+                      notify(
+                        result.handbook ||
+                          !input.detailedGuide ||
+                          target !== "all"
+                          ? "攻略已保存，可以继续编辑每一项安排"
+                          : "每日路线已保存；手册草稿保留，可继续补全",
+                      );
                     }
                   }}
                 >
@@ -1181,5 +1287,24 @@ export default function Planner() {
         </section>
       </div>
     </div>
+  );
+}
+
+function RequestElapsed({ requestKey }: { requestKey: string }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    setSeconds(0);
+    const timer = setInterval(
+      () => setSeconds(Math.floor((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [requestKey]);
+  return (
+    <p className="form-note">
+      当前请求已等待 {seconds} 秒
+      {seconds >= 45 ? " · 模型仍在返回完整内容，请稍候。" : ""}
+    </p>
   );
 }

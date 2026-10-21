@@ -96,14 +96,14 @@ test("真实 AI 接口请求、追问、失败状态；备份不含密钥", asyn
   await nav(page, "AI 灵感规划");
   await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
   await expect(
-    page.getByText("AI 生成 · 请核验", { exact: true }),
+    page.getByRole("heading", { name: "可执行旅行手册", exact: true }),
   ).toBeVisible();
   await page
     .getByLabel("追问调整（如：第二天换成室内项目）")
     .fill("第二天换成室内项目");
   await page.getByRole("button", { name: "用 AI 调整这份攻略" }).click();
   await expect(
-    page.getByText("AI 生成 · 请核验", { exact: true }),
+    page.getByRole("heading", { name: "可执行旅行手册", exact: true }),
   ).toBeVisible();
   expect(requests).toBe(18);
   await page.unroute("**/api/ai");
@@ -449,6 +449,93 @@ test("精细攻略传入旅行条件，手册失败后刷新续写、下载和�
         c.title.startsWith("出发前7天") && c.dueDate === "2026-10-30",
     ),
   ).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+test("手册等待时可浏览路线，失败后保存路线，刷新可零请求恢复再补全", async ({
+  page,
+}) => {
+  let release!: () => void;
+  const pause = new Promise<void>((r) => (release = r));
+  let handbookCalls = 0;
+  let dayCalls = 0;
+  let fail = true;
+  await page.route("**/api/ai", async (r) => {
+    const body = r.request().postDataJSON();
+    if (body.task === "handbook") {
+      handbookCalls++;
+      if (fail) {
+        await pause;
+        await r.fulfill({
+          status: 502,
+          json: { code: "MODEL_OUTPUT_FORMAT", error: "模拟列数校验失败" },
+        });
+        return;
+      }
+      const all = referenceHandbook(body.input, body.plan);
+      await r.fulfill({
+        json: {
+          sections: all.sections.filter((s) =>
+            (handbookGroups[body.group].keys as readonly string[]).includes(
+              s.key,
+            ),
+          ),
+          budget: body.group === 3 ? all.budget : [],
+        },
+      });
+      return;
+    }
+    dayCalls++;
+    const plan = enrichLocalAdvice(
+      body.input,
+      enrichReference(body.input, detailedPlan(body.input)),
+    );
+    delete plan.handbook;
+    await r.fulfill({ json: plan });
+  });
+  await page.goto("/#planner");
+  await page.getByLabel("几天的旅行").selectOption("2");
+  await page.getByRole("button", { name: "生成 AI 攻略", exact: true }).click();
+  await expect(
+    page.getByText("路线已完成，可以先浏览；手册正在补充", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".preview-day")).toHaveCount(2);
+  await expect(
+    page.getByRole("button", { name: "保存到当前旅行", exact: true }),
+  ).toBeDisabled();
+  release();
+  await expect(page.getByRole("alert")).toContainText("模拟列数校验失败");
+  await page
+    .getByRole("button", { name: "保存到当前旅行", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "已保存到行程", exact: true }),
+  ).toBeDisabled();
+  const stored = await page.evaluate(() => ({
+    state: JSON.parse(localStorage.getItem("moodnomad-web-v1")!),
+    draft: JSON.parse(localStorage.getItem("moodnomad-ai-plan-draft-v1")!),
+  }));
+  expect(stored.state.trips[0].days).toHaveLength(2);
+  expect(stored.draft.parts).toHaveLength(2);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "先查看已完成路线", exact: true })
+    .click();
+  await expect(page.locator(".preview-day")).toHaveCount(2);
+  expect(dayCalls).toBe(2);
+  expect(handbookCalls).toBe(1);
+  fail = false;
+  await page
+    .getByRole("button", { name: "继续补全旅行手册", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "可执行旅行手册", exact: true }),
+  ).toBeVisible();
+  expect(dayCalls).toBe(2);
+  expect(handbookCalls).toBe(5);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

@@ -5651,3 +5651,4 @@ h1 {
 .local-advice-actions button {display:flex;align-items:center;gap:5px;color:var(--purple);cursor:pointer;}
 .local-advice textarea {width:100%;margin-top:8px;}
 .provided-place {border:1px solid var(--line);border-radius:12px;padding:12px;margin:12px 0;}
+.route-ready-status {padding:16px;margin:16px 0;border-radius:12px;background:rgba(146,116,163,.09);font-size:13px;line-height:1.8;}

@@ -15,12 +15,13 @@ const input = {
   detailedGuide: true,
 };
 const route = mockPlan(input);
-const group = (index: number) => ({
-  sections: route.handbook!.sections.filter((s) =>
-    (handbookGroups[index].keys as readonly string[]).includes(s.key),
-  ),
-  budget: index === 3 ? route.handbook!.budget : [],
-});
+const group = (index: number) =>
+  structuredClone({
+    sections: route.handbook!.sections.filter((s) =>
+      (handbookGroups[index].keys as readonly string[]).includes(s.key),
+    ),
+    budget: index === 3 ? route.handbook!.budget : [],
+  });
 it("分组生成使用严格结构，传入偏好、全程预算和原路线", async () => {
   const fetcher = vi.fn(async (_url, init) => {
     const body = JSON.parse(init!.body as string);
@@ -89,4 +90,80 @@ it("额度不足和输出截断不自动进行收费重试", async () => {
     }),
   ).rejects.toMatchObject({ code: "MODEL_OUTPUT_LIMIT" });
   expect(length).toHaveBeenCalledTimes(1);
+});
+it("固定行字段强制各组列数，正常紧急电话或URL会标为待核实，不整组失败", async () => {
+  const { handbookDefinitions } = await import("../src/domain/handbook-schema");
+  const bundle = group(0);
+  bundle.sections[0].rows.push([
+    "紧急联络",
+    "电话：110/120；官方入口 https://example.com/",
+    "出发前核实",
+  ]);
+  const wire = Object.fromEntries(
+    bundle.sections.map((s) => [
+      s.key,
+      s.rows.map((row) =>
+        Object.fromEntries(row.map((value, index) => [`c${index + 1}`, value])),
+      ),
+    ]),
+  );
+  const fetcher = vi.fn(async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    const schema = body.response_format.json_schema.schema;
+    expect(schema.properties).not.toHaveProperty("sections");
+    expect(schema.properties).not.toHaveProperty("budget");
+    for (const key of handbookGroups[0].keys)
+      expect(schema.properties[key].items.required).toHaveLength(
+        handbookDefinitions[key].columns.length,
+      );
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(wire) } }],
+      }),
+    );
+  }) as typeof fetch;
+  const result = await generateHandbookWithProvider(
+    input,
+    0,
+    route,
+    "private-key",
+    { fetcher },
+  );
+  expect(result.sections[0].rows.at(-1)![1]).toContain("号码需出发前核实");
+  expect(JSON.stringify(result)).not.toContain("https://example.com");
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it("首次列数不正确时，带原JSON和明确错误修正；不回显原始内容", async () => {
+  const broken = group(0);
+  broken.sections[1].rows[0].pop();
+  let attempts = 0;
+  const fetcher = vi.fn(async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    if (attempts++) {
+      expect(
+        body.messages.some((m: { role: string }) => m.role === "assistant"),
+      ).toBe(true);
+      expect(body.messages.at(-1).content).toContain("列数不正确");
+    }
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify(attempts === 1 ? broken : group(0)),
+            },
+          },
+        ],
+      }),
+    );
+  }) as typeof fetch;
+  const result = await generateHandbookWithProvider(
+    input,
+    0,
+    route,
+    "private-key",
+    { fetcher },
+  );
+  expect(result.sections).toHaveLength(3);
+  expect(fetcher).toHaveBeenCalledTimes(2);
 });

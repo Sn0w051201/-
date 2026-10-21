@@ -241,3 +241,30 @@ it("完整手册失败后保留路线与章节，继续只补未完成分组，�
   expect(saved.expenses).toEqual(before.expenses);
   expect(saved.handbook).toEqual(result.handbook);
 });
+it("路线在手册请求之前即可展示，失败后可零调用恢复；回调修改不影响草稿", async () => {
+  const { routeFromDraft } = await import("./plan-job");
+  let preview: any;
+  const request = vi.fn(async (data) => mockPlan(data));
+  const requestHandbook = vi.fn(async () => {
+    expect(preview?.days).toHaveLength(5);
+    throw new Error("模拟手册结构失败");
+  });
+  await expect(
+    generateDailyPlan({ ...input, detailedGuide: true }, request, {
+      context: scope,
+      requestHandbook,
+      onRouteReady: (plan) => {
+        preview = plan;
+      },
+    }),
+  ).rejects.toThrow("手册第 1 组");
+  const saved = loadPlanDraft()!;
+  const restored = routeFromDraft(saved);
+  expect(restored.days).toHaveLength(5);
+  expect(restored.handbook).toBeUndefined();
+  expect(request).toHaveBeenCalledTimes(5);
+  preview.days[0].items[0].name = "回调修改";
+  expect(routeFromDraft(loadPlanDraft()!).days[0].items[0].name).not.toBe(
+    "回调修改",
+  );
+});

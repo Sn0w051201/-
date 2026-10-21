@@ -54,6 +54,7 @@ export async function aiHandler(req: IncomingMessage, res: ServerResponse) {
         dailyPlanning: true,
         completeHandbook: true,
         localAdvice: true,
+        handbookColumns: true,
       }),
     );
     return true;

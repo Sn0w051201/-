@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   completePlaceAddress,
   placeCopyText,
@@ -67,7 +67,7 @@ export function Coverage({ items }: { items: Pick<Activity, "slot">[] }) {
     </div>
   );
 }
-export default function Recommendation({
+function Recommendation({
   item,
   expanded = false,
 }: {
@@ -302,3 +302,5 @@ export default function Recommendation({
     </div>
   );
 }
+
+export default memo(Recommendation);

@@ -29,6 +29,7 @@ export interface PlanDraft {
   updatedAt: number;
 }
 export interface PlanJobOptions {
+  onRouteReady?: (plan: GeneratedPlan) => void;
   requestHandbook?: (
     input: PlanInput,
     group: number,
@@ -42,6 +43,7 @@ export interface PlanJobOptions {
 }
 const DRAFT_KEY = "moodnomad-ai-plan-draft-v1";
 let memory: PlanDraft | null = null;
+const readCache = new Map<string, { raw: string; value: PlanDraft | null }>();
 let epoch = 0;
 function valid(value: unknown): value is PlanDraft {
   try {
@@ -87,12 +89,19 @@ export function loadPlanDraft(): PlanDraft | null {
     try {
       const raw = globalThis[kind]?.getItem(DRAFT_KEY);
       if (raw) {
-        const value = JSON.parse(raw);
-        if (valid(value)) values.push(value);
+        let entry = readCache.get(kind);
+        if (!entry || entry.raw !== raw) {
+          const value = raw.length <= 4500000 ? JSON.parse(raw) : null;
+          entry = { raw, value: valid(value) ? value : null };
+          readCache.set(kind, entry);
+        }
+        if (entry.value && Date.now() - entry.value.updatedAt <= 7 * 86400000)
+          values.push(entry.value);
       }
     } catch {}
   }
-  if (memory && valid(memory)) values.push(memory);
+  if (memory && Date.now() - memory.updatedAt <= 7 * 86400000)
+    values.push(memory);
   return values.sort((a, b) => b.updatedAt - a.updatedAt)[0] || null;
 }
 function store(draft: PlanDraft) {
@@ -110,6 +119,7 @@ function store(draft: PlanDraft) {
 export function clearPlanDraft() {
   epoch++;
   memory = null;
+  readCache.clear();
   for (const kind of ["localStorage", "sessionStorage"] as const)
     try {
       globalThis[kind]?.removeItem(DRAFT_KEY);
@@ -138,6 +148,13 @@ function merge(input: PlanInput, parts: GeneratedPlan[]): GeneratedPlan {
     days: parts.flatMap((p) => p.days),
   });
 }
+/** Recover completed route without issuing model calls or requiring a completed handbook. */
+export function routeFromDraft(draft: PlanDraft): GeneratedPlan {
+  if (!valid(draft) || draft.parts.length !== draft.input.days)
+    throw new Error("路线尚未完整生成，请继续未完成日期。");
+  return merge(draft.input, draft.parts);
+}
+
 function contextFor(input: PlanInput, parts: GeneratedPlan[]) {
   if (input.previousPlan) {
     const prior = planSchema.parse(JSON.parse(input.previousPlan));
@@ -277,6 +294,7 @@ async function performDailyPlan(
   }
   assertGuideQuality(result, input);
   if (withHandbook) {
+    options.onRouteReady?.(structuredClone(result));
     draft.handbookParts ||= [];
     for (
       let group = draft.handbookParts.length;

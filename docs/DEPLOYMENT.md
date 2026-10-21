@@ -136,3 +136,7 @@ OpenAI 默认 `gpt-4o-mini`、GPT-4o 当前别名/已知结构化快照、GPT-4.
 部署新前端时同步更新Render或CloudBase后端。Render在服务页选择 **Manual Deploy → Deploy latest commit**，构建用 `npm ci && npm run build`，启动用 `npm run start:server`。公开健康检查 `/api/health` 应含 `completeHandbook:true`；已有模型密钥、CORS和代理地址配置继续使用。该标志只表示接口版本，不代表模型余额或配置有效。
 
 完整攻略默认需要每天一次及4组手册请求，失败继续不会重复已保存结果。保留现有每分钟12次请求限制，达到限流时稍后继续；CloudBase管理员需确认 `AI_DAILY_LIMIT` 足够本人需求与费用预算。未提供真实API凭据时，可先用离线参考验证完整展示、下载、保存和清单流程。
+
+### 手册校验与等待体验修复
+
+同步部署最新后端，`/api/health` 应含 `handbookColumns:true`。新输出按本组固定列字段（c1/c2等）生成，再转换为原始sections/rows结构，因此原草稿、旅行备份和接口响应兼容。无需更改Key或数据库。客户端沿用原浏览器草稿键，路线完成时先展示；手册失败不清除路线，允许先保存路线、继续补全。模型输出不完整仍会报错，不会以虚构数据填补。
