@@ -19,8 +19,8 @@ Vite 默认监听 5173，并同时提供 `/api/ai` 模型代理，不需要另�
 npm run typecheck       # 前端、共享领域、后端 TypeScript
 npm test                # 领域规则、AA、权限、模型输出、HTTP代理测试
 npm run test:e2e        # 桌面和手机尺寸 Chromium 功能回归
-npm run build           # 生成 dist/
-npm run build:server    # 生成 server-dist/server.mjs
+npm run build           # 生成 dist/，自动 postbuild 生成 Node 后端
+npm run build:server    # 可选：单独重建 server-dist/server.mjs
 npm run build:cloud     # 可选：CloudBase 云函数
 ```
 
@@ -61,6 +61,8 @@ npm run build:cloud     # 可选：CloudBase 云函数
 
 ### 在线站点的 AI 后端
 
+Render 可导入仓库的 `render.yaml`：[一键部署入口](https://render.com/deploy?repo=https://github.com/Sn0w051201/-)。已有 Render 服务按 [部署文档](docs/DEPLOYMENT.md#render-一键部署-node-代理) 配置；`npm run build` 会自动构建后端，避免启动时找不到 `server-dist/server.mjs`。
+
 **GitHub Pages 只提供静态网页，不能运行模型代理。** 站点的行程、发现、账本、照片、海报等本地功能可直接使用；真实 AI 需要部署下面的 Node 服务，随后把 `https://你的服务/api/ai` 填入网页设置。仅填写 Key 而没有代理地址不能在 Pages 上调用模型。
 
 在支持 Node 的服务器/容器平台上：
@@ -68,7 +70,6 @@ npm run build:cloud     # 可选：CloudBase 云函数
 ```bash
 npm ci
 npm run build
-npm run build:server
 # 把 .env.example 复制为 .env，只填写服务端变量与自己的配置
 npm run start:server
 ```

@@ -82,3 +82,19 @@ npm run deploy:pages
 首次需在 GitHub 仓库 Settings → Pages，将 Source 设为 Deploy from a branch，Branch 选 gh-pages，目录 / (root)，保存。只有 Pages 构建成功并能从公网读取后才算部署完成；仅分支推送成功不等于网页已经上线。
 
 在线演示网址为 `https://sn0w051201.github.io/-/`。2026-10-21 已验证公网 HTML、JS、CSS、图片均返回 HTTP 200；从公网获取经 TLS 验证的资源后，桌面/手机浏览器渲染、PNG 下载与只读分享检查均通过。云端 Chromium 对代理 CA 的信任与系统请求客户端不同，因此浏览器检查通过使用现有受信 CA 的请求客户端转送公开资源，未关闭 TLS 验证。大陆网络可达性取决于用户网络，不能保证所有网络都能访问 GitHub Pages。
+
+## Render 一键部署 Node 代理
+
+仓库提供 `render.yaml`，可通过 [Render Blueprint](https://render.com/deploy?repo=https://github.com/Sn0w051201/-) 导入，配置 Node 22、免费实例、健康检查和当前 GitHub Pages 来源。Render 账号需由所有者授权 GitHub 仓库访问；实例可用性和套餐以平台为准。
+
+已有 Web Service 使用：
+
+- Build Command：`npm ci && npm run build`
+- Start Command：`npm run start:server`
+- Environment：`NODE_VERSION=22`、`ALLOWED_ORIGIN=https://sn0w051201.github.io`
+
+`npm run build` 现在会自动执行 `postbuild → npm run build:server`，同时生成 `dist/` 和 `server-dist/server.mjs`；原来的 `npm install; npm run build` 也会生成后端入口。无需将构建产物提交进 Git。
+
+若自动部署已开启，推送 main 后会重建；否则在 Render 点击 Manual Deploy → Deploy latest commit。`render.yaml` 对新建 Blueprint 生效，不会自动改变已有服务的控制台环境变量。
+
+部署成功后，使用 Render 实际分配的网址访问 `/api/health`，应返回 `{"ok":true}`。前端代理地址填同一网址加 `/api/ai`。域名必须以控制台实际显示为准，不能从服务名称猜测。浏览器使用自己购买的模型 Key 时，服务器无需设置 `LLM_API_KEY` 或 `PROXY_ACCESS_TOKEN`。首次请求可能等待免费实例唤醒。

@@ -1,0 +1,16 @@
+# Render Blueprint: https://render.com/deploy?repo=https://github.com/Sn0w051201/-
+# For an existing Render service, pushing main triggers a rebuild if auto-deploy is enabled.
+services:
+  - type: web
+    name: moodnomad-api
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ALLOWED_ORIGIN
+        value: https://sn0w051201.github.io

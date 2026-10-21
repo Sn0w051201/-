@@ -14,7 +14,8 @@
     "check": "npm run typecheck && npm test && npm run build && npm run build:cloud",
     "deploy:pages": "node scripts/deploy-pages.mjs",
     "build:server": "node scripts/build-server.mjs",
-    "start:server": "NODE_ENV=production node --env-file-if-exists=.env server-dist/server.mjs"
+    "start:server": "NODE_ENV=production node --env-file-if-exists=.env server-dist/server.mjs",
+    "postbuild": "npm run build:server"
   },
   "dependencies": {
     "@cloudbase/js-sdk": "^2.23.0",
